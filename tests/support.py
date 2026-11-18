@@ -22,7 +22,6 @@ def base_settings(tmp_path: Path, **overrides: object) -> Settings:
         "log_file": None,
         "geoip_city_db": tmp_path / "missing-city.mmdb",
         "geoip_asn_db": tmp_path / "missing-asn.mmdb",
-        "goaccess_enabled": False,
         "syslog_listen": None,
         "syslog_host": None,
         "syslog_port": None,

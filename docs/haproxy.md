@@ -58,16 +58,15 @@ backend bk_web
 
 Notes:
 
-- `option httplog` produces the standard field order the built-in parser and the
-  bundled GoAccess configuration expect.
+- `option httplog` produces the standard field order the built-in parser expects.
 - `mode http` is required to see HTTP requests. A `mode tcp` frontend cannot
   produce HTTP analytics.
 - TLS termination requires the certificate and key in a PEM file readable by
   the HAProxy user.
 - Keep your existing timeouts, ACLs, backends and certificate paths.
-- If you add a custom `log-format`, update the GoAccess configuration too. The
-  built-in parser is deliberately tolerant of the standard format and the
-  simple format, not arbitrary field orders.
+- The built-in parser is deliberately tolerant of the standard format and the
+  simple format, not arbitrary field orders. If you add a custom `log-format`,
+  align it with one of those shapes or extend the parser.
 
 ### What the app receives
 
@@ -253,7 +252,7 @@ snapshot warnings instead.
 | `sni=-` for every TLS record | `tcp-request content accept` runs before the capture line | Move the capture line above accept. |
 | `sni=-` for some clients | Client omitted SNI, or traffic is not TLS | Expected for some clients; verify with a known browser/curl. |
 | No HTTP requests in the app | Frontend is `mode tcp`, or `option httplog` is missing | Use HTTP mode and `option httplog` on the terminating frontend. |
-| GoAccess rejects the log | Custom `log-format` does not match the bundled GoAccess config | Mount a matching GoAccess config and set `GOACCESS_CONFIG`. |
+| HTTP details are empty | Frontend is `mode tcp`, or `option httplog` is missing | Use HTTP mode and `option httplog` on the terminating frontend. |
 | Viewer IP is always the proxy | `X-Forwarded-For` is not sent or the peer is not trusted | Add `option forwardfor` and set `TRUSTED_PROXIES`. |
 | TLS passthrough shows no URLs | Traffic is encrypted end to end | Expected. Only SNI metadata is visible. |
 | 503 from the dashboard backend | App not running or wrong port | Check `docker compose ps` and `curl http://127.0.0.1:8009/healthz`. |

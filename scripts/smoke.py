@@ -68,9 +68,6 @@ def main() -> int:
             status, _headers, _body = request(port, "GET", "/assets/../haproxy_analytics/__init__.py")
             checks.append(("traversal rejected", status == 404))
 
-            status, _headers, _body = request(port, "GET", "/goaccess")
-            checks.append(("GoAccess absent", status == 404))
-
             failed = [name for name, passed in checks if not passed]
             for name, passed in checks:
                 print(f"{'PASS' if passed else 'FAIL':4} {name}")

@@ -99,13 +99,6 @@ uses the shell environment or CLI flags, not `.env` automatically.
 | `SYSLOG_TLS_REQUIRE_CLIENT_CERT` | `false` | Set true for mTLS. |
 | `SYSLOG_BIND` / `SYSLOG_PORT` | `127.0.0.1` / `5514` | Host side of the optional Compose port mappings. |
 | `SYSLOG_CERT_DIR` | `./certs` | Host directory for optional syslog TLS material. |
-| `GOACCESS_ENABLED` | `false` | Generate the optional GoAccess report in the image. |
-| `GOACCESS_BINARY` | `goaccess` | GoAccess binary name or path. |
-| `GOACCESS_CONFIG` | `/app/config/goaccess-haproxy.conf` | GoAccess parser configuration inside the container. |
-| `GOACCESS_FRONTENDS` | empty | Comma-separated frontend allowlist for GoAccess input. Empty includes all HTTP frontends. |
-| `GOACCESS_TIMEOUT` | `60` | GoAccess execution timeout in seconds. |
-| `GOACCESS_MAX_LINES` | `100000` | Maximum HTTP lines passed to GoAccess. |
-| `GOACCESS_MAX_HTML_BYTES` | `5000000` | Maximum report size the app will serve. |
 | `LOG_LEVEL` | `INFO` | Container log level. |
 | `DEMO_MODE` | `false` | Use the bundled synthetic log. |
 | `GEOIP_ACCOUNT_ID` | placeholder | Only used by the optional `geoip-update` profile. |
@@ -152,37 +145,48 @@ systemd timer examples on the Docker host, see
 
 The app never downloads databases and never sends client IPs to MaxMind.
 
-### GoAccess
+### HTTP analytics and per-IP details
 
-The image contains GoAccess. Enable it when you want the detailed report:
+The HTTP analytics page is generated natively from parsed HAProxy events. It
+includes request totals, status classes, methods, protocols, an hourly
+distribution, bandwidth, top paths, backends, countries and ASNs.
+
+The **Per-IP HTTP details** table adds, for each displayed client IP:
+
+- request and byte totals, plus 4xx/5xx counts;
+- 2xx/3xx/4xx/5xx breakdowns;
+- methods, protocols, top paths and backends;
+- first and last seen timestamps.
+
+The **Requests** tab lists the newest individual HTTP requests, including
+client IP and port, country/city, request, status, bytes, frontend,
+backend/server and protocol. It is capped by `MAX_REQUEST_ROWS` (default 2000)
+and has a text filter. Selecting **View requests** on a per-IP row opens the
+same table filtered to that client.
+
+#### Private IPs and per-IP detail
+
+By default `MASK_INTERNAL_IPS=true` masks non-global addresses in the dashboard
+and API. `MASK_FULL=true` collapses all masked addresses to `x.x.x.x`, so every
+private client appears in one grouped row. This is intentional for shared or
+less-trusted access.
+
+To keep individual private IPs visible for per-IP analysis, disable internal
+masking and clear the explicit mask networks:
 
 ```dotenv
-GOACCESS_ENABLED=true
-GOACCESS_FRONTENDS=ft_web
-GOACCESS_TIMEOUT=60
-GOACCESS_MAX_LINES=100000
+MASK_INTERNAL_IPS=false
+MASK_NETWORKS=
+MASK_FULL=false
 ```
 
-The report is generated from HTTP lines only, in a temporary directory, and
-served in a sandboxed iframe. If your HAProxy `log-format` is not the standard
-`option httplog` format, mount a matching GoAccess configuration and set
-`GOACCESS_CONFIG` to its container path. See [operations.md](operations.md#goaccess).
+Restart the container after the change. The dashboard must remain behind the
+authenticated HAProxy frontend; with masking disabled it contains raw client
+addresses.
 
-GoAccess requires a valid IP in its client field, so masked clients are passed
-as `0.0.0.0` (`::` for IPv6) instead of `x.x.x.x`. The report groups them as one
-visitor and never receives the raw internal address.
-
-Set `GOACCESS_FRONTENDS` to the HTTP frontend that produces the report, for
-example `ft_web`. This mirrors `grep ' ft_web'` and prevents
-HTTP lines from other frontends with a different format from reaching
-GoAccess. Empty means all HTTP frontends.
-
-With the bundled standard `option httplog` configuration, the app builds the
-GoAccess input from its parsed HTTP events. Custom captures, extra fields and
-custom field order in the raw log do not reach GoAccess. Events GoAccess cannot
-represent, such as `---` status records, are omitted and counted. GoAccess
-config files that reference missing GeoIP databases are adjusted
-automatically; the warning names the ignored path.
+If `MASK_NETWORKS` contains `192.0.0.0/8` or `172.0.0.0/8`, those ranges stay
+masked even when `MASK_INTERNAL_IPS=false`. Remove or narrow the list to see
+those addresses.
 
 ### Syslog receiver
 
@@ -328,8 +332,9 @@ CLI flags override the corresponding environment values.
 | Dashboard is empty | Is the log mounted at `HAPROXY_LOG_FILE`? Is it readable by UID 10001? Does it contain new records? |
 | Geo columns show Unknown | Is `maxminddb` installed and are both MMDB paths valid? Private addresses are intentionally not geolocated. |
 | GeoIP DB missing warning | Mount `./geoip` and set the two paths. The rest of the dashboard still works. |
-| GoAccess tab says not enabled | Set `GOACCESS_ENABLED=true` and restart. Check `docker compose logs` for format errors. |
-| GoAccess rejected the format | The report now names the rejected field. Check `GOACCESS_CONFIG`, or set `GOACCESS_FRONTENDS` to the HTTP frontend whose `log-format` matches it. |
+| Private IPs all show `x.x.x.x` | Set `MASK_INTERNAL_IPS=false`, `MASK_NETWORKS=` and `MASK_FULL=false`, then restart. Keep the dashboard behind authentication. |
+| Per-IP table has one grouped row | Masking is enabled. Disable internal masking as above to distinguish clients. |
+| HTTP details are empty | Is the log using `option httplog` on an HTTP frontend? Check the snapshot warnings for parser counts. |
 | Syslog buffer empty | Is `SYSLOG_LISTEN` set to `0.0.0.0:5514`, the Compose syslog port reachable and the sender allowlisted? Check the container logs and the health JSON. |
 | Viewer IP is the proxy | Set `TRUSTED_PROXIES` to the HAProxy address and ensure HAProxy sends `X-Forwarded-For`. |
 | 403/404 from HAProxy | Check the dashboard hostname, auth userlist and backend address. |

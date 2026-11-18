@@ -3,23 +3,6 @@
 HAProxy Analytics is MIT licensed. The repository and the published container
 image include or depend on the following separate components.
 
-## GoAccess
-
-- Version in the published image: Debian bookworm `goaccess 1:1.7-1`.
-- License: GNU General Public License version 2 (GPL-2.0).
-- Upstream: <https://github.com/allinurl/goaccess>
-- Debian source: <https://sources.debian.org/src/goaccess/>
-- Debian package details: <https://packages.debian.org/bookworm/goaccess>
-
-The image contains the unmodified Debian binary. The application invokes it as
-a separate process to generate the optional HTTP report. The GPL notice and
-full license text are installed in the image under
-`/usr/share/doc/goaccess/copyright`. If you redistribute the image, keep that
-notice and make the corresponding source available as required by the GPL.
-
-If you prefer an image without GoAccess, remove the `goaccess` package from the
-`Dockerfile`; the built-in HTTP analytics continue to work.
-
 ## maxminddb (MaxMind DB Reader for Python)
 
 - License: Apache License 2.0.

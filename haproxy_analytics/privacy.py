@@ -15,14 +15,6 @@ _FULL_MASK = {
     6: "x:x:x:x:x:x:x:x",
 }
 
-# GoAccess validates its %h (client address) field. Display masks such as
-# x.x.x.x are intentionally not valid addresses, so masked clients need a
-# parseable placeholder instead.
-_GOACCESS_HOST = {
-    4: "0.0.0.0",
-    6: "::",
-}
-
 
 def _match_network(
     address: ipaddress.IPv4Address | ipaddress.IPv6Address,
@@ -131,60 +123,3 @@ def mask_text_ips(
         return match.group(0)
 
     return _IPV6_BRACKET.sub(replace_v6, _IPV4.sub(replace_v4, text))
-
-
-def goaccess_host(
-    value: str,
-    networks: tuple[IPNetwork, ...],
-    mask_non_global: bool,
-) -> str:
-    """Return a valid %h value for a masked client address.
-
-    GoAccess rejects ``x.x.x.x`` because it validates the client field as an
-    IP address. Use the unspecified address instead: it keeps the line
-    parseable, groups all masked internal clients together (like the dashboard
-    does) and cannot leak the real address.
-    """
-
-    if not should_mask(value, networks, mask_non_global):
-        return value
-    address = ipaddress.ip_address(value)
-    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
-        return _GOACCESS_HOST[4]
-    return _GOACCESS_HOST[address.version]
-
-
-def mask_http_line(
-    line: str,
-    networks: tuple[IPNetwork, ...] = (),
-    mask_non_global: bool = True,
-    full: bool = False,
-) -> str:
-    """Mask addresses in an HTTP log line before GoAccess.
-
-    The client field is masked with ``0.0.0.0`` (or ``::`` for IPv6) because
-    GoAccess validates ``%h`` as an address. Other fields, such as an IP in a
-    request path, keep the usual ``x`` display mask.
-    """
-
-    space = line.find(" ")
-    if space < 0:
-        return mask_text_ips(line, networks, mask_non_global, full)
-    client, rest = line[:space], line[space:]
-    if client.startswith("["):
-        end = client.find("]")
-        if end > 1:
-            candidate = client[1:end]
-            if should_mask(candidate, networks, mask_non_global):
-                client = (
-                    f"[{goaccess_host(candidate, networks, mask_non_global)}]"
-                    + client[end + 1 :]
-                )
-    else:
-        candidate, separator, port = client.rpartition(":")
-        if separator and should_mask(candidate, networks, mask_non_global):
-            host = goaccess_host(candidate, networks, mask_non_global)
-            if ":" in host:
-                host = f"[{host}]"
-            client = f"{host}:{port}"
-    return client + mask_text_ips(rest, networks, mask_non_global, full)

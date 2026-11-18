@@ -21,10 +21,10 @@ HAProxy Analytics is a small self-hosted service. It reads HAProxy logs from a m
 - **Visitor table** grouped by observed client IP: SNI hostnames, HTTP backends, event counts and last-seen time.
 - **Internal IP masking** enabled by default: private, loopback and documentation addresses are masked in the dashboard and API; public addresses remain visible.
 - **"This is you"** highlight through the local `/api/whoami` endpoint. Forwarded addresses are trusted only from explicitly configured proxies; internal viewers see a masked notice instead of a highlight.
-- **Optional GoAccess report** in a sandboxed iframe for operators who already use GoAccess.
+- **Detailed native HTTP view**: status classes, protocol mix, hourly distribution, bandwidth, and per-IP request/byte/status/path/backend details.
 - **Optional syslog receiver** for HAProxy hosts that cannot mount a log file locally. Disabled by default, with a source allowlist and optional TCP TLS/mTLS.
 - **Optional persistent syslog history** in a host-mounted data directory, with size rotation and a clear-history action in the dashboard.
-- **Graceful degradation**: no MaxMind database, no GoAccess and no log file do not crash the dashboard; they produce clear warnings and an empty state.
+- **Graceful degradation**: no MaxMind database and no log file do not crash the dashboard; they produce clear warnings and an empty state.
 
 ## Quick start
 
@@ -95,8 +95,7 @@ python3 -m haproxy_analytics --demo --bind 127.0.0.1 --port 8080
 HAProxy log file ──┐
                    ├──> parser ──> in-memory aggregator ──> snapshot JSON
 optional syslog ───┘                    │
-                                        ├──> local GeoLite2 City/ASN lookup
-                                        └──> optional GoAccess report
+                                        └──> local GeoLite2 City/ASN lookup
                                                     │
 browser <── same-origin HTTP <── Python server <─────┘
    │                              │
@@ -156,11 +155,11 @@ Copy [`.env.example`](.env.example) to `.env`. The most important settings:
 | `MAX_REQUEST_ROWS` | `2000` | Newest individual HTTP requests retained for the Requests view and API. |
 | `SYSLOG_ALLOWED_NETWORKS` | `127.0.0.0/8,::1/128` | Source allowlist for the syslog receiver. |
 | `SYSLOG_TLS_CERT` / `SYSLOG_TLS_KEY` | empty | Optional TCP TLS certificate and key. |
-| `GOACCESS_ENABLED` | `false` | Generate the optional GoAccess report. |
-| `GOACCESS_FRONTENDS` | empty | Comma-separated frontend allowlist for GoAccess input. Empty includes all HTTP frontends. |
 | `DEMO_MODE` | `false` | Use the bundled synthetic log. |
 
 The full reference is in [docs/deployment.md](docs/deployment.md). Never commit the resulting `.env`, logs, GeoIP databases or certificates.
+
+Internal addresses are masked by default. With `MASK_FULL=true` all masked clients collapse into one `x.x.x.x` row, so per-IP HTTP detail is lost. To see individual private IPs, set `MASK_INTERNAL_IPS=false`, clear `MASK_NETWORKS` and set `MASK_FULL=false`, then restart. Keep the dashboard behind the authenticated HAProxy frontend.
 
 ## Security model
 
@@ -171,8 +170,8 @@ The full reference is in [docs/deployment.md](docs/deployment.md). Never commit 
 - **A local GeoIP lookup.** MaxMind databases are mounted files; client IPs are never sent to MaxMind or anyone else.
 - **Explicit proxy trust.** `X-Forwarded-For` is ignored unless the immediate peer is in `TRUSTED_PROXIES`.
 - **Internal IP masking.** Private/internal addresses are masked by default in the dashboard and API; public addresses remain visible.
-- **Bounded inputs.** Log tail size, visitor rows, syslog message size and GoAccess report size are all capped.
-- **Sandboxed GoAccess.** The optional report cannot read the parent page or make network requests.
+- **Bounded inputs.** Log tail size, visitor rows, individual request rows and syslog message size are all capped.
+- **No embedded third-party report.** HTTP analytics are rendered natively from parsed events; there is no report iframe or external script.
 - **Secret scanning.** Gitleaks runs in CI. The repository contains only synthetic demo data.
 
 Read [SECURITY.md](SECURITY.md) and [docs/security.md](docs/security.md) before exposing the dashboard.
@@ -227,8 +226,6 @@ The CI workflow runs tests on Python 3.11 and 3.12, verifies the repository, run
 
 MIT. See [LICENSE](LICENSE).
 
-The published image also contains the separate GoAccess program, which is
-GPL-2.0 licensed. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the
-source links and the other component notices.
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for component notices.
 
 This is an independent self-hosted tool, not official HAProxy or MaxMind software. HAProxy and MaxMind have their own licenses and trademarks.

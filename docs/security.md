@@ -96,27 +96,29 @@ the receiver can inject fake events. Mitigations:
 The receiver enforces a maximum message size and a bounded ring buffer, but it
 cannot make an untrusted sender trustworthy.
 
-### 5. Keep GoAccess sandboxed
+### 5. Keep rendering textual and same-origin
 
-The optional GoAccess report is generated HTML from log data. The app serves it
-with a `sandbox` CSP in an iframe:
+The dashboard has no embedded report iframe, no third-party chart library and no
+external script. HTTP analytics are rendered from the in-memory snapshot with
+DOM text nodes. The app's Content Security Policy blocks external scripts,
+frames and network connections:
 
 ```text
-sandbox allow-scripts;
 default-src 'none';
-style-src 'unsafe-inline';
-script-src 'unsafe-inline' 'unsafe-eval';
-img-src data:;
-font-src data:;
-frame-ancestors 'self'
+script-src 'self';
+style-src 'self';
+img-src 'self' data:;
+font-src 'self';
+connect-src 'self';
+frame-src 'self';
+object-src 'none';
+base-uri 'none';
+frame-ancestors 'none';
+form-action 'none'
 ```
 
-The report needs `unsafe-eval` because GoAccess compiles its report templates
-with `new Function()`. This directive applies only to the sandboxed GoAccess
-response; the dashboard itself does not allow eval. The sandbox still prevents
-the report from reading or changing the parent page, and the CSP blocks all
-network requests (`default-src 'none'`). Do not change the app to embed
-GoAccess HTML directly in the main document.
+Do not add a third-party report iframe, chart CDN, map tile service or remote
+font. Keep `connect-src` limited to `'self'`.
 
 ### 6. Harden the container
 
@@ -124,7 +126,7 @@ The supplied Compose file uses:
 
 - a non-root user (UID/GID `10001`);
 - a read-only root filesystem;
-- a small `/tmp` tmpfs for temporary GoAccess output;
+- a small `/tmp` tmpfs;
 - `cap_drop: ALL`;
 - `no-new-privileges:true`;
 - no Docker socket;
@@ -203,17 +205,27 @@ fd00:1234::1    -> fd00:1234::x
 Public addresses such as `8.8.8.8` remain visible. Masked rows are grouped by
 their masked prefix, so the visitor table loses host-level detail for internal
 networks by design. The same masking is applied to IP literals in requested
-paths, SNI/backend names and the optional GoAccess input.
+paths, SNI/backend names and the native HTTP request rows.
 
-GoAccess validates the client field as an IP address and rejects `x.x.x.x`.
-For the optional GoAccess report only, the masked client is therefore written
-as `0.0.0.0` (`::` for IPv6). The raw address is never passed to GoAccess, and
-all masked clients appear as that one placeholder visitor in its report.
-
-The native Requests view uses the same masking for client addresses, request
-paths, frontend names and backend names. It stores only the newest
-`MAX_REQUEST_ROWS` individual HTTP events in memory, and the snapshot API
+The native HTTP per-IP table and Requests view use the same masking for client
+addresses, request paths, frontend names and backend names. They store only the
+newest `MAX_REQUEST_ROWS` individual HTTP events in memory, and the snapshot API
 returns the same masked rows.
+
+Masked rows are grouped by their displayed mask. With `MASK_FULL=true` every
+masked client collapses into one `x.x.x.x` row, so per-IP detail is lost. To see
+individual private addresses, set:
+
+```dotenv
+MASK_INTERNAL_IPS=false
+MASK_NETWORKS=
+MASK_FULL=false
+```
+
+If `MASK_NETWORKS` still contains `192.0.0.0/8` or `172.0.0.0/8`, those ranges
+remain masked. Keep the dashboard behind the authenticated HAProxy frontend when
+masking is disabled; the API then contains raw client addresses and request
+paths.
 
 When the viewer's own address is internal, the `THIS IS YOU` self-highlight is
 disabled. Highlighting a masked group would match several different clients.
@@ -267,10 +279,6 @@ for access control or as proof of a person's location.
 The HTTP server suppresses access logging by default so request paths and client
 addresses are not duplicated into container logs. Operational errors are
 logged, but the app does not intentionally log raw request lines or credentials.
-GoAccess stderr may contain a rejected log line and is logged locally for
-diagnostics; the dashboard receives a generic error message instead of raw log
-content.
-
 ## Persistent syslog history
 
 When `SYSLOG_STORE_FILE` is set, accepted syslog lines are appended to a file in

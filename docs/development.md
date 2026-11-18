@@ -9,7 +9,6 @@ haproxy_analytics/
 ├── aggregate.py         counters, per-IP details, map points
 ├── config.py            environment and CLI configuration
 ├── geoip.py             optional MaxMind lookup
-├── goaccess.py          optional GoAccess subprocess
 ├── logsource.py         file tail, syslog buffer/receiver
 ├── parser.py            HTTP, SNI and repeated-message parser
 ├── server.py            HTTP routes, security headers, whoami
@@ -27,9 +26,6 @@ public/
     ├── app.js           view rendering, filters, theme, API polling
     ├── world-dark.svg
     └── world-light.svg
-
-config/
-└── goaccess-haproxy.conf
 
 examples/
 ├── demo-haproxy.log     synthetic demo data
@@ -54,7 +50,6 @@ scripts/
 - Python 3.11 or newer.
 - `maxminddb` for GeoIP. The app runs without it and reports a warning.
 - Docker only for building/running the container.
-- GoAccess is optional; the container image installs it.
 
 ## Run locally
 
@@ -103,9 +98,7 @@ The test suite covers:
 - file-tail truncation without partial lines;
 - bounded syslog buffers;
 - UDP/TCP receiver allowlists, size limits and TCP TLS;
-- GoAccess disabled mode, missing binary, fake report generation, size limit,
-  standard-format normalization, frontend filtering, GeoIP config paths and
-  error details;
+- HTTP detail counters, protocol/status classes, request rows and per-IP row caps;
 - internal IP masking, masked visitor grouping and capped individual request rows;
 - persistent syslog store append, rotation, clear and API token checks;
 - snapshot counts, warnings, source modes and failure fallback;
@@ -113,7 +106,7 @@ The test suite covers:
   `/api/whoami` trust behavior, HEAD and version/health endpoints.
 
 The smoke test starts the real server with the demo log and checks the dashboard,
-API, assets, CSP, method rejection, traversal rejection and GoAccess absence.
+API, assets, CSP, method rejection and traversal rejection.
 
 ## Frontend rules
 
@@ -122,7 +115,7 @@ API, assets, CSP, method rejection, traversal rejection and GoAccess absence.
   are inserted with `textContent` and DOM APIs.
 - Keep `connect-src` limited to `'self'`. Do not add a map tile service, a
   third-party IP lookup or remote fonts.
-- Keep the GoAccess iframe sandboxed. Do not embed its HTML in the main page.
+- Do not add a third-party report iframe, chart CDN or external script. Render data from the snapshot with DOM APIs.
 - Use the shared design tokens in `app.css`; keep dark and light themes usable.
 - Status must have a text label in addition to color.
 - Preserve keyboard focus, skip link, table semantics and reduced-motion
@@ -136,7 +129,7 @@ When adding a format:
 
 1. Add a focused parser test with a synthetic line.
 2. Keep the standard HTTP and TLS formats working.
-3. Decide how the new fields affect counts, visitor rows and GoAccess.
+3. Decide how the new fields affect counts, visitor rows and HTTP detail tables.
 4. Update `docs/operations.md` and the demo log if it is a supported public
    example.
 5. Do not log credentials, private addresses or real hostnames in tests.

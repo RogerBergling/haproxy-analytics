@@ -1,4 +1,4 @@
-"""HTTP server for the dashboard, JSON API and optional GoAccess report."""
+"""HTTP server for the dashboard and JSON API."""
 
 from __future__ import annotations
 
@@ -33,17 +33,6 @@ MAIN_CSP = (
     "base-uri 'none'; "
     "frame-ancestors 'none'; "
     "form-action 'none'"
-)
-GOACCESS_CSP = (
-    "sandbox allow-scripts; "
-    "default-src 'none'; "
-    "style-src 'unsafe-inline'; "
-    # GoAccess compiles its report templates with new Function(), which needs
-    # unsafe-eval. This applies only to the sandboxed report response.
-    "script-src 'unsafe-inline' 'unsafe-eval'; "
-    "img-src data:; "
-    "font-src data:; "
-    "frame-ancestors 'self'"
 )
 SECURITY_HEADERS = {
     "Referrer-Policy": "no-referrer",
@@ -277,24 +266,6 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
         status = HTTPStatus.OK if result.get("cleared") else HTTPStatus.CONFLICT
         self._send_json(result, status)
 
-    def _serve_goaccess(self, *, head_only: bool = False) -> None:
-        html = self.service.goaccess_html()
-        if not html:
-            self._send_text(
-                HTTPStatus.NOT_FOUND,
-                "No GoAccess report is available. Enable GOACCESS_ENABLED and wait for a refresh.",
-                head_only=head_only,
-            )
-            return
-        self._send_bytes(
-            HTTPStatus.OK,
-            html.encode("utf-8"),
-            "text/html; charset=utf-8",
-            head_only=head_only,
-            csp=GOACCESS_CSP,
-            frame_options="SAMEORIGIN",
-        )
-
     def do_GET(self) -> None:  # noqa: N802
         path = urlsplit(self.path).path
         if path in ("/", "/index.html"):
@@ -309,8 +280,6 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
             self._serve_version()
         elif path == "/api/clear-token":
             self._serve_clear_token()
-        elif path == "/goaccess":
-            self._serve_goaccess()
         elif path.startswith("/assets/") or path in {f"/{name}" for name in STATIC_ROOT_FILES}:
             self._serve_static(path)
         else:
@@ -330,8 +299,6 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
             self._serve_version(head_only=True)
         elif path == "/api/clear-token":
             self._serve_clear_token(head_only=True)
-        elif path == "/goaccess":
-            self._serve_goaccess(head_only=True)
         elif path.startswith("/assets/") or path in {f"/{name}" for name in STATIC_ROOT_FILES}:
             self._serve_static(path, head_only=True)
         else:

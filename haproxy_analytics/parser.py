@@ -79,7 +79,6 @@ class HttpEvent:
 @dataclass(frozen=True)
 class ParsedEvent:
     event: TlsEvent | HttpEvent
-    http_message: str | None = None
 
 
 def split_syslog_line(raw_line: str) -> tuple[str, str | None]:
@@ -196,8 +195,7 @@ def _parse_event(message: str, count: int, syslog_time: str | None) -> ParsedEve
                 count=count,
                 client_port=match.group("port"),
                 server=_clean_name(server_name) or "-",
-            ),
-            http_message=message,
+            )
         )
     return None
 
@@ -214,9 +212,6 @@ def parse_line(raw_line: str) -> ParsedEvent | None:
         count = int(repeated.group(1))
         inner = repeated.group(2).strip()
         inner_message, _ = split_syslog_line(inner)
-        parsed = _parse_event(inner_message, count, syslog_time)
-        if parsed and parsed.http_message:
-            parsed = ParsedEvent(parsed.event, parsed.http_message)
-        return parsed
+        return _parse_event(inner_message, count, syslog_time)
 
     return _parse_event(message, 1, syslog_time)

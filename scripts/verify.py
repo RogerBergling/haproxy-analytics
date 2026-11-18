@@ -36,7 +36,6 @@ REQUIRED = [
     "public/assets/app.js",
     "public/assets/world-dark.svg",
     "public/assets/world-light.svg",
-    "config/goaccess-haproxy.conf",
     "examples/demo-haproxy.log",
     "tests/test_parser.py",
     "tests/test_server.py",

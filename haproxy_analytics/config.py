@@ -15,7 +15,6 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PUBLIC_DIR = PROJECT_ROOT / "public"
 DEFAULT_DEMO_LOG = PROJECT_ROOT / "examples" / "demo-haproxy.log"
-DEFAULT_GOACCESS_CONFIG = PROJECT_ROOT / "config" / "goaccess-haproxy.conf"
 
 
 class ConfigError(ValueError):
@@ -131,13 +130,6 @@ class Settings:
     syslog_tls_key: Path | None
     syslog_tls_ca: Path | None
     syslog_tls_require_client_cert: bool
-    goaccess_enabled: bool
-    goaccess_binary: str
-    goaccess_config: Path
-    goaccess_frontends: tuple[str, ...]
-    goaccess_timeout: int
-    goaccess_max_lines: int
-    goaccess_max_html_bytes: int
     log_level: str
 
     @classmethod
@@ -182,7 +174,6 @@ class Settings:
 
         trusted = _parse_networks("TRUSTED_PROXIES", _env_csv("TRUSTED_PROXIES"))
 
-        goaccess_config = _resolve_path(_env("GOACCESS_CONFIG"), DEFAULT_GOACCESS_CONFIG)
         app_port = _env_int("APP_PORT", 8080, 1)
         if app_port > 65535:
             raise ConfigError(f"APP_PORT must be between 1 and 65535, got {app_port}")
@@ -224,13 +215,6 @@ class Settings:
             syslog_tls_key=tls_key,
             syslog_tls_ca=tls_ca,
             syslog_tls_require_client_cert=require_client_cert,
-            goaccess_enabled=_env_bool("GOACCESS_ENABLED", False),
-            goaccess_binary=_env("GOACCESS_BINARY", "goaccess") or "goaccess",
-            goaccess_config=goaccess_config,
-            goaccess_frontends=_env_csv("GOACCESS_FRONTENDS"),
-            goaccess_timeout=_env_int("GOACCESS_TIMEOUT", 60, 1),
-            goaccess_max_lines=_env_int("GOACCESS_MAX_LINES", 100000, 1),
-            goaccess_max_html_bytes=_env_int("GOACCESS_MAX_HTML_BYTES", 5_000_000, 1024),
             log_level=_env("LOG_LEVEL", "INFO").upper() or "INFO",
         )
 

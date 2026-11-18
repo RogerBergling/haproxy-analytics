@@ -64,11 +64,25 @@ class Aggregator:
         self.http_status: Counter[str] = Counter()
         self.http_methods: Counter[str] = Counter()
         self.http_paths: Counter[str] = Counter()
+        self.http_path_bytes: Counter[str] = Counter()
+        self.http_path_ips: defaultdict[str, set[str]] = defaultdict(set)
         self.http_countries: Counter[str] = Counter()
         self.tls_countries: Counter[str] = Counter()
         self.http_asns: Counter[str] = Counter()
         self.tls_asns: Counter[str] = Counter()
         self.sni_counts: Counter[str] = Counter()
+        self.http_bytes_by_ip: Counter[str] = Counter()
+        self.http_errors_by_ip: Counter[str] = Counter()
+        self.http_status_by_ip: defaultdict[str, Counter[str]] = defaultdict(Counter)
+        self.http_methods_by_ip: defaultdict[str, Counter[str]] = defaultdict(Counter)
+        self.http_protocols_by_ip: defaultdict[str, Counter[str]] = defaultdict(Counter)
+        self.http_paths_by_ip: defaultdict[str, Counter[str]] = defaultdict(Counter)
+        self.http_backends_by_ip: defaultdict[str, Counter[str]] = defaultdict(Counter)
+        self.http_first_seen: dict[str, str] = {}
+        self.http_last_seen: dict[str, str] = {}
+        self.http_protocols: Counter[str] = Counter()
+        self.http_status_classes: Counter[str] = Counter()
+        self.http_hourly: Counter[int] = Counter()
 
         self.ip_meta: dict[str, dict[str, Any]] = {}
         self.ip_snis: defaultdict[str, Counter[str]] = defaultdict(Counter)
@@ -175,9 +189,37 @@ class Aggregator:
         self.http_status[event.status] += count
         self.http_methods[event.method] += count
         self.http_paths[event.path] += count
+        self.http_path_bytes[event.path] += event.bytes * count
+        self.http_path_ips[event.path].add(event.ip)
         self.bytes_out += event.bytes * count
         self.ip_backends[event.ip][event.backend] += count
         self._touch_ip(event.ip, event.timestamp_display)
+
+        size = event.bytes * count
+        self.http_bytes_by_ip[event.ip] += size
+        if event.status[:1] in {"4", "5"}:
+            self.http_errors_by_ip[event.ip] += count
+        self.http_status_by_ip[event.ip][event.status] += count
+        self.http_methods_by_ip[event.ip][event.method] += count
+        self.http_protocols[event.protocol] += count
+        self.http_protocols_by_ip[event.ip][event.protocol] += count
+        self.http_paths_by_ip[event.ip][event.path] += count
+        self.http_backends_by_ip[event.ip][event.backend] += count
+        status_class = (
+            f"{event.status[0]}xx" if event.status[:1] in "12345" else "other"
+        )
+        self.http_status_classes[status_class] += count
+        when = event.timestamp_display
+        if when and when != "-":
+            first = self.http_first_seen.get(event.ip)
+            if first is None or when < first:
+                self.http_first_seen[event.ip] = when
+            last = self.http_last_seen.get(event.ip)
+            if last is None or when > last:
+                self.http_last_seen[event.ip] = when
+            hour = when[11:13]
+            if hour.isdigit():
+                self.http_hourly[int(hour)] += count
 
         geo = self._geo(event.ip)
         country = geo["country"]
@@ -229,6 +271,87 @@ class Aggregator:
     def _location(geo: dict[str, Any]) -> str:
         parts = [part for part in (geo["city"], geo["country"]) if part not in ("-", "")]
         return ", ".join(parts) or "Unknown"
+
+    def _http_ip_details(self) -> list[dict[str, Any]]:
+        rows: dict[str, dict[str, Any]] = {}
+        for ip, requests in self.http_by_ip.items():
+            geo = self._geo(ip)
+            display_ip = (
+                mask_ip(ip, self.mask_networks, self.mask_internal_ips, self.mask_full)
+                if self.masking_enabled
+                else ip
+            )
+            row = rows.get(display_ip)
+            if row is None:
+                row = {
+                    "ip": display_ip,
+                    "country": geo["country"],
+                    "city": geo["city"],
+                    "asn": geo["asn"],
+                    "requests": 0,
+                    "bytes": 0,
+                    "errors": 0,
+                    "_statuses": Counter(),
+                    "_methods": Counter(),
+                    "_protocols": Counter(),
+                    "_paths": Counter(),
+                    "_backends": Counter(),
+                    "first_seen": self.http_first_seen.get(ip, "-"),
+                    "last_seen": self.http_last_seen.get(ip, "-"),
+                }
+                rows[display_ip] = row
+            else:
+                for key in ("country", "city", "asn"):
+                    if row[key] != geo[key]:
+                        row[key] = "Multiple"
+                first = self.http_first_seen.get(ip, "-")
+                if first != "-" and (row["first_seen"] == "-" or first < row["first_seen"]):
+                    row["first_seen"] = first
+                last = self.http_last_seen.get(ip, "-")
+                if last > row["last_seen"]:
+                    row["last_seen"] = last
+            row["requests"] += requests
+            row["bytes"] += self.http_bytes_by_ip[ip]
+            row["errors"] += self.http_errors_by_ip[ip]
+            row["_statuses"].update(self.http_status_by_ip[ip])
+            row["_methods"].update(self.http_methods_by_ip[ip])
+            row["_protocols"].update(self.http_protocols_by_ip[ip])
+            row["_paths"].update(self.http_paths_by_ip[ip])
+            row["_backends"].update(self.http_backends_by_ip[ip])
+
+        result: list[dict[str, Any]] = []
+        for row in sorted(
+            rows.values(), key=lambda item: (item["requests"], item["bytes"]), reverse=True
+        ):
+            classes: Counter[str] = Counter()
+            for status, count in row.pop("_statuses").items():
+                if status[:1] in "12345":
+                    classes[f"{status[0]}xx"] += count
+                else:
+                    classes["other"] += count
+            result.append(
+                {
+                    "ip": row["ip"],
+                    "country": row["country"],
+                    "city": row["city"],
+                    "asn": row["asn"],
+                    "requests": row["requests"],
+                    "bytes": row["bytes"],
+                    "errors": row["errors"],
+                    "status_2xx": classes.get("2xx", 0),
+                    "status_3xx": classes.get("3xx", 0),
+                    "status_4xx": classes.get("4xx", 0),
+                    "status_5xx": classes.get("5xx", 0),
+                    "status_other": classes.get("other", 0),
+                    "methods": self._items(row.pop("_methods"), 6),
+                    "protocols": self._items(row.pop("_protocols"), 5),
+                    "top_paths": self._items(self._mask_counter(row.pop("_paths")), 4),
+                    "backends": self._items(self._mask_counter(row.pop("_backends")), 5),
+                    "first_seen": row["first_seen"],
+                    "last_seen": row["last_seen"],
+                }
+            )
+        return result[: self.max_visitor_rows]
 
     def build(self) -> dict[str, Any]:
         all_ips = set(self.http_by_ip) | set(self.tls_by_ip)
@@ -416,12 +539,30 @@ class Aggregator:
 
         latest_seen = max(self.ip_last_seen.values(), default="-")
 
-        if self.masking_enabled:
-            http_paths: Counter[str] = Counter()
-            for name, count in self.http_paths.items():
-                http_paths[mask_text_ips(name, self.mask_networks, self.mask_internal_ips, self.mask_full)] += count
-        else:
-            http_paths = self.http_paths
+        path_rows: dict[str, dict[str, Any]] = {}
+        for name, count in self.http_paths.items():
+            display = (
+                mask_text_ips(name, self.mask_networks, self.mask_internal_ips, self.mask_full)
+                if self.masking_enabled
+                else name
+            )
+            row = path_rows.setdefault(
+                display, {"name": display, "count": 0, "bytes": 0, "ips": set()}
+            )
+            row["count"] += count
+            row["bytes"] += self.http_path_bytes[name]
+            row["ips"] |= self.http_path_ips[name]
+        http_paths_payload = [
+            {
+                "name": row["name"],
+                "count": row["count"],
+                "bytes": row["bytes"],
+                "visitors": len(row["ips"]),
+            }
+            for row in sorted(
+                path_rows.values(), key=lambda item: item["count"], reverse=True
+            )[:30]
+        ]
 
         return {
             "kpis": {
@@ -441,12 +582,25 @@ class Aggregator:
                 "total": self.http_total,
                 "bandwidth": self.bytes_out,
                 "errors": errors,
+                "unique_ips": len(self.http_by_ip),
+                "avg_bytes": round(self.bytes_out / self.http_total) if self.http_total else 0,
+                "error_rate": round(errors / self.http_total * 100, 1) if self.http_total else 0.0,
                 "methods": self._items(self.http_methods, 10),
                 "statuses": self._items(self.http_status, 12),
+                "status_classes": [
+                    {"name": name, "count": self.http_status_classes.get(name, 0)}
+                    for name in ("2xx", "3xx", "4xx", "5xx", "other")
+                ],
+                "protocols": self._items(self.http_protocols, 10),
+                "hourly": [
+                    {"name": f"{hour:02d}:00", "count": self.http_hourly.get(hour, 0)}
+                    for hour in range(24)
+                ],
                 "backends": self._items(http_backends, 15),
-                "paths": self._items(http_paths, 30),
+                "paths": http_paths_payload,
                 "countries": self._items(self.http_countries, 15),
                 "asns": self._items(self.http_asns, 15),
+                "ip_details": self._http_ip_details(),
                 "recent_limit": self.max_request_rows,
                 "recent": [
                     {

@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # HAProxy Analytics is a read-only analytics service. The image contains the
-# Python application, the static dashboard and the optional GoAccess binary.
+# Python application and the static dashboard.
 # It has no database, no upload endpoint and no persistent write path.
 # The base image is pinned by digest; update it deliberately.
 FROM python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
@@ -33,7 +33,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends goaccess tzdata \
+    && apt-get install -y --no-install-recommends tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --home-dir /app --no-create-home --shell /usr/sbin/nologin app
@@ -43,7 +43,6 @@ RUN pip install --no-cache-dir --requirement requirements.txt
 
 COPY --chown=app:app haproxy_analytics ./haproxy_analytics
 COPY --chown=app:app public ./public
-COPY --chown=app:app config ./config
 COPY --chown=app:app examples ./examples
 COPY --chown=app:app LICENSE THIRD_PARTY_NOTICES.md ./
 
@@ -51,9 +50,7 @@ ENV APP_BIND=0.0.0.0 \
     APP_PORT=8080 \
     HAPROXY_LOG_FILE=/logs/haproxy.log \
     GEOIP_CITY_DB=/geoip/GeoLite2-City.mmdb \
-    GEOIP_ASN_DB=/geoip/GeoLite2-ASN.mmdb \
-    GOACCESS_BINARY=goaccess \
-    GOACCESS_CONFIG=/app/config/goaccess-haproxy.conf
+    GEOIP_ASN_DB=/geoip/GeoLite2-ASN.mmdb
 
 USER 10001:10001
 

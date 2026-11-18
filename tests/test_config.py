@@ -16,7 +16,6 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(str(settings.log_file), "/logs/haproxy.log")
         self.assertIsNone(settings.syslog_listen)
         self.assertEqual(settings.trusted_proxies, ())
-        self.assertFalse(settings.goaccess_enabled)
         self.assertTrue(settings.mask_internal_ips)
         self.assertEqual(settings.mask_networks, ())
         self.assertFalse(settings.mask_full)
@@ -48,15 +47,6 @@ class ConfigTests(unittest.TestCase):
         with patch.dict(os.environ, {"MAX_REQUEST_ROWS": "25"}, clear=True):
             settings = Settings.from_env()
         self.assertEqual(settings.max_request_rows, 25)
-
-    def test_goaccess_frontends(self) -> None:
-        with patch.dict(
-            os.environ,
-            {"GOACCESS_FRONTENDS": "ft_a, ft_b"},
-            clear=True,
-        ):
-            settings = Settings.from_env()
-        self.assertEqual(settings.goaccess_frontends, ("ft_a", "ft_b"))
 
     def test_syslog_store(self) -> None:
         with patch.dict(

@@ -74,8 +74,7 @@ message repeated 3 times: [ src=203.0.113.10 dst=198.51.100.10:443 sni=app.examp
 message repeated 2 times: [ 203.0.113.20:53137 [18/Nov/2026:00:01:26.000] ft_https bk_static/static1 0/0/1/1/2 304 0 "GET /assets/app.js HTTP/1.1"]
 ```
 
-The count is applied to the relevant counters. Repeated HTTP lines are expanded
-for GoAccess up to `GOACCESS_MAX_LINES`.
+The count is applied to the relevant counters and request rows.
 
 ## Diagnose an empty or partial dashboard
 
@@ -124,68 +123,46 @@ HAProxy timestamps do not include a timezone. The app displays the recorded
 date and time. `TZ` affects generated-at metadata, not the log timestamps.
 Check the HAProxy host clock and the sender/relay clock.
 
-## GoAccess
+## HTTP analytics, requests and per-IP details
 
-GoAccess is optional.
+HTTP analytics are generated natively from parsed events; there is no external
+report process.
+
+The **HTTP analytics** page includes:
+
+- total requests, unique HTTP client IPs, bandwidth, 4xx/5xx counts and average
+  response size;
+- status classes (2xx/3xx/4xx/5xx), methods, protocols and an hourly
+  distribution;
+- top paths with requests, unique visitors and bytes, plus backends, countries and ASNs;
+- a **Per-IP HTTP details** table with request/byte totals, error counts,
+  status classes, methods, protocols, top paths, backends and first/last seen
+  timestamps.
+
+The **Requests** tab lists the newest individual HTTP events, capped by
+`MAX_REQUEST_ROWS` (default 2000). It includes time, client address and port,
+country/city, request, status, bytes, frontend, backend/server and protocol.
+The text filter searches all columns. **View requests** on a per-IP row opens
+the Requests tab with that client preselected.
+
+### Private IPs and per-IP detail
+
+Masking applies to the native tables exactly as it does to the rest of the
+dashboard. The default `MASK_INTERNAL_IPS=true` masks private and other
+non-global addresses. With `MASK_FULL=true`, all masked clients collapse into
+one `x.x.x.x` row, which hides per-IP differences.
+
+To see individual private IPs and keep per-IP HTTP detail meaningful:
 
 ```dotenv
-GOACCESS_ENABLED=true
-GOACCESS_FRONTENDS=ft_web
-GOACCESS_TIMEOUT=60
-GOACCESS_MAX_LINES=100000
+MASK_INTERNAL_IPS=false
+MASK_NETWORKS=
+MASK_FULL=false
 ```
 
-The image includes the `goaccess` binary and a bundled config at
-`/app/config/goaccess-haproxy.conf`. If your HAProxy format differs:
-
-1. Create a GoAccess config that matches it.
-2. Mount it into the container, for example add this to the app service:
-   `- ./goaccess.conf:/config/goaccess.conf:ro`
-3. Set `GOACCESS_CONFIG=/config/goaccess.conf` in `.env`.
-4. Restart and check the GoAccess tab and container logs.
-
-The app passes only HTTP lines (with the syslog prefix removed) to GoAccess. TLS
-SNI lines are not GoAccess input. A non-zero exit produces a dashboard message
-that names the rejected field and a detailed local log entry.
-
-Set `GOACCESS_FRONTENDS` when the log contains more than one HTTP frontend with
-a different `log-format`. The local reference setup used `grep ' ft_web'`;
-the equivalent is:
-
-```dotenv
-GOACCESS_FRONTENDS=ft_web
-```
-
-With the bundled standard `option httplog` configuration, the app builds a
-clean standard line from each parsed HTTP event instead of forwarding the raw
-log line. Custom captures, extra fields and format variations therefore do not
-reach GoAccess. The generated line uses the parsed client address, timestamp,
-frontend, backend, status, response size and request.
-
-Events GoAccess cannot represent, such as `---` status records, are omitted and
-counted in the GoAccess status and snapshot warnings. A `geoip-database` path
-that points to a missing file is rewritten to the matching `/geoip` file, or
-ignored when the database is not mounted.
-
-If the report still fails, the GoAccess status includes a `detail` field that
-names the field (`%h`, `%t`, `%s`, ...) GoAccess rejected.
-
-GoAccess validates the client address (`%h`), so the dashboard's `x.x.x.x` mask
-cannot be used in its input. When masking is active, the app writes masked
-clients as `0.0.0.0` (`::` for IPv6) in the GoAccess file. The report stays
-parseable, no raw internal address reaches GoAccess, and all masked clients are
-grouped as one `0.0.0.0` visitor. The main dashboard still shows them as
-`x.x.x.x`.
-
-Do not embed the GoAccess HTML directly into the main page. The sandbox is part
-of the security model.
-
-The **Requests** tab is independent of GoAccess. It shows the newest
-`MAX_REQUEST_ROWS` parsed HTTP events with time, client address and port,
-country/city, request, status, bytes, frontend, backend/server and protocol,
-plus a text filter. It uses the same masking as the rest of the dashboard, so
-internal addresses appear as their configured mask rather than the GoAccess
-`0.0.0.0` placeholder.
+If `MASK_NETWORKS` still contains `192.0.0.0/8` or `172.0.0.0/8`, those ranges
+remain masked. Remove or narrow the list. Keep the dashboard behind the
+authenticated HAProxy frontend when masking is disabled.
 
 ## Log rotation
 
@@ -212,8 +189,6 @@ current file. This is expected for a current-file reader.
 | `MAX_REQUEST_ROWS` | Newest individual HTTP requests retained for the Requests view/API. |
 | `SYSLOG_BUFFER_LINES` | In-memory syslog history. |
 | `SYSLOG_MAX_MESSAGE_BYTES` | Per-message cap. |
-| `GOACCESS_MAX_LINES` | HTTP lines passed to GoAccess. |
-| `GOACCESS_MAX_HTML_BYTES` | Maximum report size served. |
 
 The app keeps counters and per-IP details in memory, not raw lines. A very large
 unique-IP or unique-path set still costs memory. Monitor the container and raise
@@ -272,9 +247,6 @@ writable again.
 
 - **File mode** only reads the mounted log. It never writes to it.
 - **Snapshot data** is in memory.
-- **GoAccess** uses a temporary directory under `/tmp`. Compose mounts `/tmp`
-  as a 32 MB tmpfs. If it fills, GoAccess fails for that refresh; the built-in
-  HTTP/TLS dashboard continues and the snapshot shows an error.
 - **Docker container logs** are written by the Docker logging driver on the
   host. The supplied Compose file caps `json-file` logs at 10 MB × 3 files.
 - **GeoIP databases** live in the host `./geoip` directory and are typically
@@ -287,7 +259,6 @@ writable again.
   lines until space is available.
 - Docker may fail to write container logs, create temporary files or restart
   the container.
-- GoAccess report generation fails, but the core dashboard can continue.
 - The **Clear syslog history** action can free the persistent store's disk space.
 - A container restart can fail until Docker has writable disk space again.
 

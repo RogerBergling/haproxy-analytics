@@ -12,7 +12,7 @@ Please use GitHub's private **Security advisories** feature for this repository
 instead of opening a public issue. Include:
 
 - the affected version or commit;
-- the deployment mode (file log, syslog, GoAccess enabled or disabled);
+- the deployment mode (file log, syslog or both);
 - a minimal reproduction that does not contain real client IPs, hostnames or
   credentials;
 - the impact you believe is possible.
@@ -47,8 +47,8 @@ history as sensitive data.
   networks.
 - The optional syslog receiver is disabled by default, has a source allowlist,
   bounded buffers and optional TCP TLS with optional client certificates.
-- The optional GoAccess report is served in a sandboxed iframe with its own
-  restrictive Content Security Policy.
+- HTTP analytics are rendered natively; the app embeds no third-party report,
+  chart library or external script.
 - The container runs as a non-root user with a read-only root filesystem, all
   Linux capabilities dropped and `no-new-privileges`.
 - CI runs unit tests, repository verification, an HTTP smoke test, a secret

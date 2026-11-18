@@ -3,7 +3,6 @@ from __future__ import annotations
 import http.client
 import ipaddress
 import json
-import stat
 import tempfile
 import threading
 import unittest
@@ -16,16 +15,6 @@ from haproxy_analytics.snapshot import SnapshotService
 from haproxy_analytics.syslog_store import SyslogStore
 
 from tests.support import demo_settings
-
-FAKE_GOACCESS = """#!/usr/bin/env python3
-import sys
-from pathlib import Path
-
-args = sys.argv[1:]
-output = Path(args[args.index("-o") + 1])
-output.write_text("<!doctype html><title>fake goaccess</title>", encoding="utf-8")
-"""
-
 
 @contextmanager
 def running_server(settings, service=None):
@@ -223,12 +212,6 @@ class ServerTests(unittest.TestCase):
             self.assertIn("text/css", headers["content-type"])
             self.assertIn(b"--accent", body)
 
-    def test_goaccess_unavailable(self) -> None:
-        with tempfile.TemporaryDirectory() as temp, running_server(demo_settings(Path(temp))) as (port, _service):
-            status, _headers, _body = request(port, "GET", "/goaccess")
-            self.assertEqual(status, 404)
-
-
     def test_clear_syslog_history_requires_token(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_path = Path(temp)
@@ -287,29 +270,6 @@ class ServerTests(unittest.TestCase):
                 self.assertEqual(payload["meta"]["source"]["syslog"]["store"]["total_bytes"], 0)
 
             syslog.stop()
-
-    def test_goaccess_report_is_sandboxed(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            temp_path = Path(temp)
-            binary = temp_path / "goaccess"
-            binary.write_text(FAKE_GOACCESS, encoding="utf-8")
-            binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
-            config = temp_path / "goaccess.conf"
-            config.write_text("time-format %H:%M:%S\n", encoding="utf-8")
-            settings = demo_settings(
-                temp_path,
-                goaccess_enabled=True,
-                goaccess_binary=str(binary),
-                goaccess_config=config,
-            )
-            with running_server(settings) as (port, _service):
-                status, headers, body = request(port, "GET", "/goaccess")
-                self.assertEqual(status, 200)
-                self.assertIn("text/html", headers["content-type"])
-                self.assertIn("sandbox allow-scripts", headers["content-security-policy"])
-                self.assertIn("frame-ancestors 'self'", headers["content-security-policy"])
-                self.assertIn("'unsafe-eval'", headers["content-security-policy"])
-                self.assertIn(b"fake goaccess", body)
 
     def test_post_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp, running_server(demo_settings(Path(temp))) as (port, _service):

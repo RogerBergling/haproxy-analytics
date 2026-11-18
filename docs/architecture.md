@@ -7,12 +7,11 @@ a static browser dashboard, not a log platform.
 
 | Component | File | Responsibility |
 | --- | --- | --- |
-| HTTP server | `haproxy_analytics/server.py` | Serves the dashboard, JSON API, health/version endpoints, the optional GoAccess report and the token-protected syslog clear endpoint. Applies security headers and method restrictions. |
-| Snapshot service | `haproxy_analytics/snapshot.py` | Reads sources, runs the parser and aggregator, holds the latest snapshot and the optional GoAccess HTML in memory. |
+| HTTP server | `haproxy_analytics/server.py` | Serves the dashboard, JSON API, health/version endpoints and the token-protected syslog clear endpoint. Applies security headers and method restrictions. |
+| Snapshot service | `haproxy_analytics/snapshot.py` | Reads sources, runs the parser and aggregator, and holds the latest snapshot in memory. |
 | Parser | `haproxy_analytics/parser.py` | Recognises syslog prefixes, HTTP `option httplog` records, SNI records and `message repeated` groups. |
 | Aggregator | `haproxy_analytics/aggregate.py` | Produces counters, per-IP details, country/city statistics and map points. |
 | GeoIP resolver | `haproxy_analytics/geoip.py` | Optional MaxMind City/ASN lookups from local MMDB files. Never performs network lookups. |
-| GoAccess runner | `haproxy_analytics/goaccess.py` | Optional subprocess with a timeout and output-size cap. |
 | Log sources | `haproxy_analytics/logsource.py` | Read-only file tail reader, bounded syslog ring buffer and optional UDP/TCP receiver. |
 | Syslog store | `haproxy_analytics/syslog_store.py` | Optional append-only persistent syslog history with size rotation and a clear operation. |
 | Configuration | `haproxy_analytics/config.py` | Parses environment and CLI values with safe defaults. |
@@ -35,7 +34,7 @@ a static browser dashboard, not a log platform.
                                 │
               ┌─────────────────┼──────────────────┐
               ▼                 ▼                  ▼
-        snapshot JSON     map points/country    optional GoAccess
+        snapshot JSON     map points/country   HTTP/IP detail rows
               │                 │                  │
               └─────────────────┴──────────────────┘
                                 │
@@ -70,12 +69,12 @@ the error in `/healthz`.
 `GET /api/snapshot` returns a JSON object with:
 
 - `meta`: generation time, refresh interval, version, active sources, GeoIP
-  availability, syslog store status, GoAccess status, parser statistics and
-  warnings.
+  availability, syslog store status, parser statistics and warnings.
 - `kpis`: HTTP requests, TLS connections, unique IPs, countries, 4xx/5xx,
   bandwidth, geolocated points, SNI hostnames and backends.
-- `http`: methods, statuses, backends, paths, countries, ASNs and the newest
-  individual requests, capped by `MAX_REQUEST_ROWS`.
+- `http`: methods, statuses, status classes, protocols, hourly distribution,
+  backends, paths, countries, ASNs, per-IP details, and the newest individual
+  requests, capped by `MAX_REQUEST_ROWS`.
 - `tls`: SNI hostnames, countries, ASNs and recent connections.
 - `geo`: countries, cities and map points with per-point IP lists for the
   self-highlight feature.
@@ -96,8 +95,6 @@ It is not a public API.
 - The snapshot is replaced atomically under a lock.
 - Raw log lines are never stored in the snapshot. The visitor table is capped,
   top lists are capped, map points are capped and the syslog ring is bounded.
-- GoAccess uses a temporary directory under `/tmp`; the container runs with a
-  small tmpfs so a missing cleanup cannot fill the image.
 
 ## Security boundaries
 
@@ -111,8 +108,8 @@ It is not a public API.
    `TRUSTED_PROXIES`.
 5. **Syslog**: source allowlist, size limits and optional TLS/mTLS. Plain syslog
    has no authentication and must be kept on a trusted network.
-6. **GoAccess**: generated HTML is served in a sandboxed iframe with a separate
-   CSP. It cannot access the parent page or make network requests.
+6. **Rendering**: dashboard values are inserted as text nodes and DOM APIs, never
+   `innerHTML`. There is no third-party report iframe or chart script.
 7. **Container**: non-root user, read-only root filesystem, no capabilities and
    `no-new-privileges`.
 

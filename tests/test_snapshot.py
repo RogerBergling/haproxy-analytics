@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ipaddress
 import json
-import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -87,96 +86,6 @@ class SnapshotTests(unittest.TestCase):
         self.assertNotIn("192.0.2.20", json.dumps(snapshot))
 
 
-    def test_goaccess_input_is_masked(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            temp_path = Path(temp)
-            log = temp_path / "haproxy.log"
-            log.write_text(
-                'Nov 18 00:00:00 demo haproxy[1]: 192.0.2.20:1234 '
-                '[18/Nov/2026:00:00:00.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
-                '"GET http://192.0.2.20/admin HTTP/1.1"\n',
-                encoding="utf-8",
-            )
-            binary = temp_path / "goaccess"
-            binary.write_text(
-                "#!/usr/bin/env python3\n"
-                "import sys\n"
-                "from pathlib import Path\n"
-                "args = sys.argv[1:]\n"
-                "source = Path(args[0])\n"
-                "output = Path(args[args.index('-o') + 1])\n"
-                "output.write_text(source.read_text(encoding='utf-8'), encoding='utf-8')\n",
-                encoding="utf-8",
-            )
-            binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
-            config = temp_path / "goaccess.conf"
-            config.write_text("time-format %H:%M:%S\n", encoding="utf-8")
-            settings = demo_settings(
-                temp_path,
-                demo=False,
-                log_file=log,
-                mask_internal_ips=True,
-                goaccess_enabled=True,
-                goaccess_binary=str(binary),
-                goaccess_config=config,
-            )
-            service = SnapshotService(settings)
-            service.refresh_once()
-            html = service.goaccess_html() or ""
-            snapshot = service.snapshot()
-
-        self.assertIn("0.0.0.0:1234", html)
-        self.assertEqual(snapshot["http"]["recent"][0]["ip"], "192.0.x.x")
-        self.assertEqual(snapshot["http"]["recent"][0]["path"], "http://192.0.x.x/admin")
-        self.assertIn("192.0.x.x", html)
-        self.assertNotIn("192.0.2.20", html)
-
-
-    def test_goaccess_frontend_filter(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            temp_path = Path(temp)
-            log = temp_path / "haproxy.log"
-            log.write_text(
-                'Nov 18 00:00:00 demo haproxy[1]: 203.0.113.10:1234 '
-                '[18/Nov/2026:00:00:00.123] ft_a bk_app/app1 0/0/1/2/3 200 1 '
-                '"GET /a HTTP/1.1"\n'
-                'Nov 18 00:00:01 demo haproxy[1]: 203.0.113.11:1234 '
-                '[18/Nov/2026:00:00:01.123] ft_b bk_app/app1 0/0/1/2/3 200 1 '
-                '"GET /b HTTP/1.1"\n',
-                encoding="utf-8",
-            )
-            binary = temp_path / "goaccess"
-            binary.write_text(
-                "#!/usr/bin/env python3\n"
-                "import sys\n"
-                "from pathlib import Path\n"
-                "args = sys.argv[1:]\n"
-                "source = Path(args[0])\n"
-                "output = Path(args[args.index('-o') + 1])\n"
-                "output.write_text(source.read_text(encoding='utf-8'), encoding='utf-8')\n",
-                encoding="utf-8",
-            )
-            binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
-            config = temp_path / "goaccess.conf"
-            config.write_text("time-format %H:%M:%S\n", encoding="utf-8")
-            settings = demo_settings(
-                temp_path,
-                demo=False,
-                log_file=log,
-                goaccess_enabled=True,
-                goaccess_frontends=("ft_a",),
-                goaccess_binary=str(binary),
-                goaccess_config=config,
-            )
-            service = SnapshotService(settings)
-            service.refresh_once()
-            html = service.goaccess_html() or ""
-            status = service.snapshot()["meta"]["goaccess"]
-
-        self.assertIn("GET /a", html)
-        self.assertNotIn("GET /b", html)
-        self.assertEqual(status["lines"], 1)
-
     def test_request_rows_are_newest_first_and_capped(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_path = Path(temp)
@@ -239,56 +148,89 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(row["path"], "http://x.x.x.x/admin")
         self.assertNotIn("192.0.2.20", json.dumps(snapshot))
 
-    def test_standard_goaccess_input_is_rebuilt_from_the_parsed_event(self) -> None:
+    def test_http_detail_counters_and_per_ip_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            log = temp_path / "haproxy.log"
+            log.write_text(
+                'Nov 18 00:00:00 demo haproxy[1]: 203.0.113.10:1234 '
+                '[18/Nov/2026:00:00:00.123] ft_web bk_app/app1 0/0/1/2/3 200 10 '
+                '"GET /a HTTP/1.1"\n'
+                'Nov 18 00:00:01 demo haproxy[1]: 203.0.113.10:1235 '
+                '[18/Nov/2026:00:00:01.123] ft_web bk_app/app1 0/0/1/2/3 500 20 '
+                '"GET /b HTTP/1.1"\n'
+                'Nov 18 00:00:02 demo haproxy[1]: 203.0.113.11:1236 '
+                '[18/Nov/2026:00:00:02.123] ft_web bk_api/api1 0/0/1/2/3 304 0 '
+                '"GET /a HTTP/1.1"\n',
+                encoding="utf-8",
+            )
+            settings = demo_settings(temp_path, demo=False, log_file=log)
+            service = SnapshotService(settings)
+            service.refresh_once()
+            http = service.snapshot()["http"]
+
+        self.assertEqual(http["total"], 3)
+        self.assertEqual(http["unique_ips"], 2)
+        self.assertEqual(http["bandwidth"], 30)
+        self.assertEqual(http["avg_bytes"], 10)
+        self.assertEqual(http["error_rate"], 33.3)
+        classes = {item["name"]: item["count"] for item in http["status_classes"]}
+        self.assertEqual(classes, {"2xx": 1, "3xx": 1, "4xx": 0, "5xx": 1, "other": 0})
+        self.assertEqual(http["protocols"], [{"name": "HTTP/1.1", "count": 3}])
+        paths = {item["name"]: item for item in http["paths"]}
+        self.assertEqual(paths["/a"]["count"], 2)
+        self.assertEqual(paths["/a"]["visitors"], 2)
+        self.assertEqual(paths["/a"]["bytes"], 10)
+        self.assertEqual(paths["/b"]["count"], 1)
+        self.assertEqual(paths["/b"]["bytes"], 20)
+        hourly = {item["name"]: item["count"] for item in http["hourly"]}
+        self.assertEqual(hourly["00:00"], 3)
+        self.assertEqual(sum(hourly.values()), 3)
+
+        rows = {row["ip"]: row for row in http["ip_details"]}
+        first = rows["203.0.113.10"]
+        self.assertEqual(first["requests"], 2)
+        self.assertEqual(first["bytes"], 30)
+        self.assertEqual(first["errors"], 1)
+        self.assertEqual(first["status_2xx"], 1)
+        self.assertEqual(first["status_5xx"], 1)
+        self.assertEqual(first["methods"], [{"name": "GET", "count": 2}])
+        self.assertEqual({item["name"] for item in first["top_paths"]}, {"/a", "/b"})
+        self.assertEqual(first["backends"], [{"name": "bk_app", "count": 2}])
+        self.assertEqual(first["first_seen"], "2026-11-18 00:00:00")
+        self.assertEqual(first["last_seen"], "2026-11-18 00:00:01")
+        second = rows["203.0.113.11"]
+        self.assertEqual(second["requests"], 1)
+        self.assertEqual(second["status_3xx"], 1)
+
+    def test_http_ip_details_group_masked_clients(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_path = Path(temp)
             log = temp_path / "haproxy.log"
             log.write_text(
                 'Nov 18 00:00:00 demo haproxy[1]: 192.0.2.20:1234 '
-                '[18/Nov/2026:00:00:00.123] ft_web bk_app/app1 0/0/1/2/3 200 5120 '
-                '- - ---- 1/1/1/1/0 0/0 {example.com} {} '
-                '"GET http://192.0.2.20/admin HTTP/1.1"\n'
-                'Nov 18 00:00:01 demo haproxy[1]: 192.0.2.21:1234 '
-                '[18/Nov/2026:00:00:01.123] ft_web bk_app/app1 0/0/1/2/3 --- 0 '
-                '- - ---- 1/1/1/1/0 0/0 {} {} "GET /missing HTTP/1.1"\n',
+                '[18/Nov/2026:00:00:00.123] ft_web bk_app/app1 0/0/1/2/3 200 10 '
+                '"GET /a HTTP/1.1"\n'
+                'Nov 18 00:00:01 demo haproxy[1]: 192.0.2.21:1235 '
+                '[18/Nov/2026:00:00:01.123] ft_web bk_app/app1 0/0/1/2/3 200 20 '
+                '"GET /b HTTP/1.1"\n',
                 encoding="utf-8",
             )
-            binary = temp_path / "goaccess"
-            binary.write_text(
-                "#!/usr/bin/env python3\n"
-                "import sys\n"
-                "from pathlib import Path\n"
-                "args = sys.argv[1:]\n"
-                "source = Path(args[0])\n"
-                "output = Path(args[args.index('-o') + 1])\n"
-                "output.write_text(source.read_text(encoding='utf-8'), encoding='utf-8')\n",
-                encoding="utf-8",
-            )
-            binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
             settings = demo_settings(
                 temp_path,
                 demo=False,
                 log_file=log,
                 mask_internal_ips=True,
                 mask_full=True,
-                goaccess_enabled=True,
-                goaccess_binary=str(binary),
-                goaccess_config=PROJECT_ROOT / "config" / "goaccess-haproxy.conf",
             )
             service = SnapshotService(settings)
             service.refresh_once()
-            html = service.goaccess_html() or ""
-            status = service.snapshot()["meta"]["goaccess"]
+            http = service.snapshot()["http"]
 
-        self.assertIn("0.0.0.0:1234", html)
-        self.assertIn("ft_web bk_app/app1 0/0/0/0/0 200 5120", html)
-        self.assertIn('"GET http://x.x.x.x/admin HTTP/1.1"', html)
-        self.assertNotIn("192.0.2.20", html)
-        self.assertNotIn("1/1/1/1/0", html)
-        self.assertNotIn(" --- ", html)
-        self.assertEqual(status["lines"], 1)
-        self.assertEqual(status["skipped_lines"], 1)
-        self.assertEqual(status["skipped_reasons"]["status"], 1)
+        self.assertEqual(http["unique_ips"], 2)
+        self.assertEqual(len(http["ip_details"]), 1)
+        self.assertEqual(http["ip_details"][0]["ip"], "x.x.x.x")
+        self.assertEqual(http["ip_details"][0]["requests"], 2)
 
     def test_internal_ips_in_sni_and_backends_are_masked(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -426,14 +368,6 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["kpis"]["tls_total"], 12)
         self.assertTrue(snapshot["meta"]["source"]["syslog"]["enabled"])
         self.assertIn("syslog", snapshot["meta"]["source"]["active"])
-
-    def test_goaccess_disabled_by_default(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            service = SnapshotService(demo_settings(Path(temp)))
-            service.refresh_once()
-            snapshot = service.snapshot()
-        self.assertFalse(snapshot["meta"]["goaccess"]["enabled"])
-        self.assertFalse(snapshot["meta"]["goaccess"]["generated"])
 
     def test_failed_refresh_keeps_last_good_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

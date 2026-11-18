@@ -12,10 +12,8 @@ from typing import Any
 from .aggregate import Aggregator
 from .config import Settings
 from .geoip import GeoResolver
-from .goaccess import GoAccessRunner, build_goaccess_line
 from .logsource import SyslogServer, read_log_tail
 from .parser import parse_line
-from .privacy import mask_http_line
 from .version import version_info
 
 LOGGER = logging.getLogger(__name__)
@@ -30,7 +28,6 @@ def _empty_payload(message: str) -> dict[str, Any]:
             "demo": False,
             "source": {"file": {"exists": False}, "syslog": {"enabled": False}},
             "geoip": {"city": False, "asn": False},
-            "goaccess": {"enabled": False, "available": False, "generated": False, "error": None},
             "privacy": {"mask_internal_ips": True, "mask_networks": [], "mask_full": False},
             "parser": {"unparsed_lines": 0, "repeated_groups": 0, "events": 0},
             "warnings": [message],
@@ -82,7 +79,6 @@ class SnapshotService:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._snapshot: dict[str, Any] | None = None
-        self._goaccess_html: str | None = None
         self._last_success: float | None = None
         self._last_error: str | None = None
 
@@ -223,20 +219,6 @@ class SnapshotService:
                 mask_networks=self.settings.mask_networks,
                 mask_full=self.settings.mask_full,
             )
-            goaccess_lines: list[str] = []
-            goaccess_cap = self.settings.goaccess_max_lines
-            runner = GoAccessRunner(
-                enabled=self.settings.goaccess_enabled,
-                binary=self.settings.goaccess_binary,
-                config=self.settings.goaccess_config,
-                timeout=self.settings.goaccess_timeout,
-                max_lines=self.settings.goaccess_max_lines,
-                max_html_bytes=self.settings.goaccess_max_html_bytes,
-                geoip_city_db=self.settings.geoip_city_db,
-                geoip_asn_db=self.settings.geoip_asn_db,
-            )
-            use_standard_lines = runner.uses_standard_format()
-
             try:
                 for line in lines:
                     parsed = parse_line(line)
@@ -247,32 +229,6 @@ class SnapshotService:
                     if parsed.event.count > 1:
                         aggregator.record_repeated()
                     aggregator.add(parsed)
-                    if parsed.http_message and self.settings.goaccess_enabled:
-                        frontends = self.settings.goaccess_frontends
-                        if not frontends or parsed.event.frontend in frontends:
-                            remaining = goaccess_cap - len(goaccess_lines)
-                            if remaining > 0:
-                                repeat = min(parsed.event.count, remaining)
-                                if use_standard_lines:
-                                    http_message = build_goaccess_line(
-                                        parsed.event,
-                                        self.settings.mask_networks,
-                                        self.settings.mask_internal_ips,
-                                        self.settings.mask_full,
-                                    )
-                                else:
-                                    http_message = parsed.http_message
-                                    if (
-                                        self.settings.mask_internal_ips
-                                        or self.settings.mask_networks
-                                    ):
-                                        http_message = mask_http_line(
-                                            http_message,
-                                            self.settings.mask_networks,
-                                            self.settings.mask_internal_ips,
-                                            self.settings.mask_full,
-                                        )
-                                goaccess_lines.extend([http_message] * repeat)
             finally:
                 geo.close()
 
@@ -284,27 +240,6 @@ class SnapshotService:
                     f"{aggregator.unparsed_lines:,} non-empty lines did not match a supported "
                     "HAProxy format and were ignored."
                 )
-
-            goaccess_html: str | None = None
-            goaccess_status = runner.status()
-            if self.settings.goaccess_enabled:
-                if self.settings.goaccess_frontends and not goaccess_lines:
-                    warnings.append(
-                        "GOACCESS_FRONTENDS is set but no HTTP lines from those frontends "
-                        "were found. Check the configured names."
-                    )
-                goaccess_html, goaccess_status = runner.generate(goaccess_lines)
-                if goaccess_status.get("error") and goaccess_status["error"] not in warnings:
-                    warnings.append(goaccess_status["error"])
-                if goaccess_status.get("skipped_lines"):
-                    warnings.append(
-                        f"{goaccess_status['skipped_lines']:,} HTTP events were omitted from "
-                        "the GoAccess report because they could not be represented in the "
-                        "standard GoAccess format."
-                    )
-                for warning in goaccess_status.get("config_warnings", []):
-                    if warning not in warnings:
-                        warnings.append(warning)
 
             data["meta"] = {
                 "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -322,7 +257,6 @@ class SnapshotService:
                     "city_path": str(self.settings.geoip_city_db),
                     "asn_path": str(self.settings.geoip_asn_db),
                 },
-                "goaccess": goaccess_status,
                 "privacy": {
                     "mask_internal_ips": self.settings.mask_internal_ips,
                     "mask_networks": [str(network) for network in self.settings.mask_networks],
@@ -335,7 +269,6 @@ class SnapshotService:
 
             with self._lock:
                 self._snapshot = data
-                self._goaccess_html = goaccess_html
                 self._last_success = time.time()
                 self._last_error = None
         except Exception as exc:  # noqa: BLE001 - keep the last good snapshot visible
@@ -344,7 +277,6 @@ class SnapshotService:
                 self._last_error = str(exc)
                 if self._snapshot is None:
                     self._snapshot = _empty_payload(f"Snapshot refresh failed: {exc}")
-                    self._goaccess_html = None
 
     def clear_syslog_history(self) -> dict[str, Any]:
         if self.syslog is None or self.syslog.store is None:
@@ -368,10 +300,6 @@ class SnapshotService:
                     "The first snapshot is still being built. Refresh the page in a moment."
                 )
             return self._snapshot
-
-    def goaccess_html(self) -> str | None:
-        with self._lock:
-            return self._goaccess_html
 
     def health(self) -> dict[str, Any]:
         with self._lock:

@@ -25,7 +25,8 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(event.path, "/assets/app.css")
         self.assertEqual(event.protocol, "HTTP/1.1")
         self.assertEqual(event.timestamp_display, "2026-11-18 00:01:02")
-        self.assertIn("GET /assets/app.css", parsed.http_message or "")
+        self.assertEqual(parsed.event.method, "GET")
+        self.assertEqual(parsed.event.path, "/assets/app.css")
 
     def test_ipv6_http_line(self) -> None:
         line = (
@@ -82,7 +83,8 @@ class ParserTests(unittest.TestCase):
         self.assertIsNotNone(parsed)
         self.assertIsInstance(parsed.event, HttpEvent)
         self.assertEqual(parsed.event.count, 2)
-        self.assertIn("GET /assets/app.js", parsed.http_message or "")
+        self.assertEqual(parsed.event.method, "GET")
+        self.assertEqual(parsed.event.path, "/assets/app.js")
 
     def test_simple_http_format(self) -> None:
         line = (

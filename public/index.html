@@ -61,10 +61,6 @@
         <span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M8 6h12M8 12h12M8 18h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="4.5" cy="6" r="1.1" fill="currentColor"/><circle cx="4.5" cy="12" r="1.1" fill="currentColor"/><circle cx="4.5" cy="18" r="1.1" fill="currentColor"/></svg></span>
         Requests
       </button>
-      <button class="nav-item" data-view="goaccess" type="button">
-        <span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 19V5h14v14H5z" stroke="currentColor" stroke-width="1.5"/><path d="M8 15l2.4-3 2 1.8L16 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-        GoAccess
-      </button>
     </nav>
 
     <div class="nav-sep"></div>
@@ -296,7 +292,10 @@
           <div class="page-title">HTTP analytics</div>
           <div class="page-sub">Decrypted HTTP requests from <code>option httplog</code>. Passthrough TLS cannot reveal URLs or headers.</div>
         </div>
-        <div class="head-actions"><span class="pill" id="http-pill">0 requests</span></div>
+        <div class="head-actions">
+          <button class="btn" type="button" data-view-link="requests">All requests</button>
+          <span class="pill" id="http-pill">0 requests</span>
+        </div>
       </div>
 
       <div class="stats" id="http-stats"></div>
@@ -307,6 +306,12 @@
         <section class="card"><div class="card-head"><div><div class="card-title">Backends</div><div class="card-sub">Request count</div></div></div><div class="card-body" id="http-backends"></div></section>
       </div>
 
+      <div class="content three-col">
+        <section class="card"><div class="card-head"><div><div class="card-title">Status classes</div><div class="card-sub">2xx / 3xx / 4xx / 5xx</div></div></div><div class="card-body" id="http-status-classes"></div></section>
+        <section class="card"><div class="card-head"><div><div class="card-title">Protocols</div><div class="card-sub">HTTP versions</div></div></div><div class="card-body" id="http-protocols"></div></section>
+        <section class="card"><div class="card-head"><div><div class="card-title">Hourly distribution</div><div class="card-sub">Requests by log hour</div></div></div><div class="card-body" id="http-hourly"></div></section>
+      </div>
+
       <div class="content two-col">
         <section class="card"><div class="card-head"><div><div class="card-title">Countries</div><div class="card-sub">HTTP requests only</div></div></div><div class="card-body" id="http-countries"></div></section>
         <section class="card"><div class="card-head"><div><div class="card-title">Network providers</div><div class="card-sub">MaxMind ASN</div></div></div><div class="card-body" id="http-asns"></div></section>
@@ -315,8 +320,45 @@
       <section class="card">
         <div class="card-head"><div><div class="card-title">Requested paths</div><div class="card-sub">Top paths; query strings may contain sensitive values</div></div></div>
         <div class="table-wrap table-scroll">
-          <table class="data-table"><thead><tr><th>Path</th><th class="number-cell">Requests</th></tr></thead><tbody id="http-paths"></tbody></table>
+          <table class="data-table"><thead><tr><th>Path</th><th class="number-cell">Requests</th><th class="number-cell">Visitors</th><th class="number-cell">Bytes</th></tr></thead><tbody id="http-paths"></tbody></table>
         </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div><div class="card-title">Per-IP HTTP details</div><div class="card-sub">Requests, bytes, status classes, methods, paths and backends by displayed client IP</div></div>
+          <div class="card-actions">
+            <span class="badge info hidden" id="http-ip-mask-badge">Internal IPs masked</span>
+          </div>
+        </div>
+        <div class="filter-bar">
+          <label class="sr-only" for="http-ip-search">Filter HTTP IPs</label>
+          <input class="search-input" id="http-ip-search" type="search" placeholder="Filter IP, country, ASN, path, backend…" autocomplete="off">
+          <span class="result-count" id="http-ip-count">0 IPs</span>
+        </div>
+        <div class="table-wrap table-scroll http-ip-scroll">
+          <table class="data-table http-ip-table">
+            <thead>
+              <tr>
+                <th>Client IP</th>
+                <th>Country / city</th>
+                <th>Network</th>
+                <th class="number-cell">Requests</th>
+                <th class="number-cell">Bytes</th>
+                <th class="number-cell">4xx / 5xx</th>
+                <th>Status classes</th>
+                <th>Methods</th>
+                <th>Top paths</th>
+                <th>Backends</th>
+                <th>First seen</th>
+                <th>Last seen</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="http-ip-rows"></tbody>
+          </table>
+        </div>
+        <div class="card-body"><p class="card-sub" id="http-ip-note">Masked clients are grouped by their displayed address.</p></div>
       </section>
     </section>
 
@@ -361,19 +403,6 @@
       </section>
     </section>
 
-    <section class="view hidden" id="view-goaccess" data-view-panel="goaccess">
-      <div class="page-head">
-        <div>
-          <div class="page-title">GoAccess report</div>
-          <div class="page-sub">Optional detailed HTTP report. The container includes GoAccess; enable it in <code>.env</code>.</div>
-        </div>
-        <div class="head-actions"><span class="badge info" id="goaccess-status">Not enabled</span></div>
-      </div>
-      <section class="card">
-        <div class="card-body" id="goaccess-container"></div>
-      </section>
-    </section>
-
     <section class="view hidden" id="view-security" data-view-panel="security">
       <div class="page-head">
         <div>
@@ -412,8 +441,8 @@
           <p>The optional receiver is off by default. When enabled it has a source-network allowlist, bounded buffers and optional TLS with client certificates. Prefer a private network or a TLS relay; plain syslog has no authentication.</p>
         </section>
         <section class="security-item">
-          <h3>GoAccess sandbox</h3>
-          <p>The optional GoAccess report is served in a sandboxed iframe with a separate CSP. It cannot read the parent page, navigate the top window or make network requests. The built-in analytics do not require GoAccess.</p>
+          <h3>No embedded third-party reports</h3>
+          <p>The dashboard renders all HTTP analytics itself from parsed events. There is no embedded report iframe, third-party chart library or external script.</p>
         </section>
       </div>
 

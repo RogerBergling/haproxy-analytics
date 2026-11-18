@@ -8,8 +8,8 @@ const state = {
   visitorFilter: "",
   countryFilter: "",
   cityFilter: "",
+  httpIpFilter: "",
   refreshTimer: null,
-  goaccessStamp: null,
 };
 
 const VIEW_TITLES = {
@@ -19,7 +19,6 @@ const VIEW_TITLES = {
   tls: "TLS / SNI",
   http: "HTTP analytics",
   requests: "Requests",
-  goaccess: "GoAccess",
   security: "Security & privacy",
 };
 
@@ -194,9 +193,11 @@ function renderHttpStats() {
   clear(container);
   container.append(
     statCard("HTTP requests", fmt(http.total), "Decrypted requests"),
+    statCard("Unique HTTP IPs", fmt(http.unique_ips || 0), "Distinct client addresses"),
     statCard("Bandwidth", formatBytes(http.bandwidth), "Logged response bytes"),
-    statCard("4xx / 5xx", fmt(http.errors), "Errors and denials"),
-    statCard("Backends", fmt(http.backends.length), "Observed destinations")
+    statCard("4xx / 5xx", fmt(http.errors), `${fmt(http.error_rate || 0)}% of requests`),
+    statCard("Average response", formatBytes(http.avg_bytes || 0), "Bytes per request"),
+    statCard("Protocols", fmt((http.protocols || []).length), "Observed HTTP versions")
   );
 }
 
@@ -490,6 +491,20 @@ function renderHttp() {
   renderBarList($("#http-backends"), http.backends, "green", "No backends");
   renderBarList($("#http-countries"), publicCountries(http.countries), "blue", "No country data");
   renderBarList($("#http-asns"), http.asns, "violet", "No ASN data");
+  renderBarList(
+    $("#http-status-classes"),
+    (http.status_classes || []).filter((item) => item.count > 0),
+    "green",
+    "No status-class data"
+  );
+  renderBarList($("#http-protocols"), http.protocols, "blue", "No protocol data");
+  renderBarList(
+    $("#http-hourly"),
+    (http.hourly || []).filter((item) => item.count > 0),
+    "violet",
+    "No hourly data"
+  );
+  renderHttpIps();
   const body = $("#http-paths");
   if (!body) return;
   clear(body);
@@ -503,6 +518,8 @@ function renderHttp() {
           children: [
             el("td", { className: "mono wrap-cell", text: path.name, attrs: { title: path.name } }),
             el("td", { className: "number-cell", text: fmt(path.count) }),
+            el("td", { className: "number-cell", text: fmt(path.visitors || 0) }),
+            el("td", { className: "number-cell", text: formatBytes(path.bytes || 0) }),
           ],
         })
       );
@@ -517,6 +534,93 @@ function statusBadgeClass(status) {
   if (code.startsWith("4")) return "warn";
   if (code.startsWith("5")) return "err";
   return "info";
+}
+
+function viewRequestsFor(ip) {
+  showView("requests");
+  const search = $("#request-search");
+  if (search) search.value = ip;
+  renderRequests();
+}
+
+function renderHttpIps() {
+  if (!state.snapshot) return;
+  const http = state.snapshot.http || {};
+  const rows = http.ip_details || [];
+  const tbody = $("#http-ip-rows");
+  if (!tbody) return;
+  const search = state.httpIpFilter.trim().toLowerCase();
+  clear(tbody);
+  let shown = 0;
+  for (const row of rows) {
+    const haystack = [
+      row.ip,
+      row.country,
+      row.city,
+      row.asn,
+      ...(row.methods || []).map((item) => item.name),
+      ...(row.top_paths || []).map((item) => item.name),
+      ...(row.backends || []).map((item) => item.name),
+    ]
+      .join(" ")
+      .toLowerCase();
+    if (search && !haystack.includes(search)) continue;
+    shown += 1;
+    const location = [row.city, row.country].filter((part) => part && part !== "-").join(", ") || "Unknown";
+    let statusText = `2xx ${fmt(row.status_2xx)} · 3xx ${fmt(row.status_3xx)} · 4xx ${fmt(row.status_4xx)} · 5xx ${fmt(row.status_5xx)}`;
+    if (row.status_other) statusText += ` · other ${fmt(row.status_other)}`;
+    const methods = (row.methods || []).map((item) => `${item.name} ${fmt(item.count)}`).join(" · ") || "-";
+    const paths = (row.top_paths || []).map((item) => `${item.name} (${fmt(item.count)})`).join(" · ") || "-";
+    const backends = (row.backends || []).map((item) => `${item.name} (${fmt(item.count)})`).join(" · ") || "-";
+    const view = el("button", { className: "link-button", text: "View requests", attrs: { type: "button" } });
+    view.addEventListener("click", () => viewRequestsFor(row.ip));
+    tbody.append(
+      el("tr", {
+        children: [
+          el("td", { className: "mono", text: row.ip }),
+          el("td", { text: location }),
+          el("td", { text: row.asn }),
+          el("td", { className: "number-cell", text: fmt(row.requests) }),
+          el("td", { className: "number-cell", text: formatBytes(row.bytes) }),
+          el("td", { className: "number-cell", text: fmt(row.errors) }),
+          el("td", { className: "wrap-cell", text: statusText }),
+          el("td", { className: "wrap-cell", text: methods }),
+          el("td", { className: "wrap-cell", text: paths, attrs: { title: paths } }),
+          el("td", { className: "wrap-cell", text: backends, attrs: { title: backends } }),
+          el("td", { className: "mono", text: row.first_seen }),
+          el("td", { className: "mono", text: row.last_seen }),
+          el("td", { children: [view] }),
+        ],
+      })
+    );
+  }
+  if (!shown) {
+    tbody.append(
+      el("tr", {
+        children: [
+          el("td", {
+            className: "muted",
+            attrs: { colspan: "13" },
+            text: search ? "No IPs match the filter." : "No HTTP IP details are available yet.",
+          }),
+        ],
+      })
+    );
+  }
+  const count = $("#http-ip-count");
+  if (count) count.textContent = `${fmt(shown)} of ${fmt(rows.length)} IPs`;
+  const privacy = state.snapshot.meta.privacy || {};
+  const masked =
+    privacy.mask_internal_ips ||
+    (Array.isArray(privacy.mask_networks) && privacy.mask_networks.length > 0);
+  const badge = $("#http-ip-mask-badge");
+  if (badge) badge.classList.toggle("hidden", !masked);
+  const note = $("#http-ip-note");
+  if (note) {
+    note.textContent = masked
+      ? "Masked clients are grouped by their displayed address. To distinguish private IPs, set MASK_INTERNAL_IPS=false, MASK_NETWORKS= and MASK_FULL=false, then restart."
+      : "Showing raw client addresses. Keep the dashboard behind the authenticated HAProxy frontend.";
+  }
 }
 
 function renderRequests() {
@@ -595,85 +699,6 @@ function renderRequests() {
   const note = $("#requests-note");
   if (note) {
     note.textContent = `Newest first · up to ${fmt(http.recent_limit || rows.length)} rows · ${fmt(http.total || 0)} HTTP requests in the parsed window`;
-  }
-}
-
-function renderGoAccess() {
-  if (!state.snapshot) return;
-  const meta = state.snapshot.meta;
-  const status = meta.goaccess || {};
-  const badge = $("#goaccess-status");
-  const container = $("#goaccess-container");
-  if (!badge || !container) return;
-  badge.className = "badge";
-  if (status.generated) {
-    badge.classList.add("ok");
-    badge.textContent = "Report ready";
-  } else if (status.enabled) {
-    badge.classList.add("warn");
-    badge.textContent = "Not available";
-  } else {
-    badge.classList.add("info");
-    badge.textContent = "Not enabled";
-  }
-
-  if (status.generated) {
-    const stamp = meta.generated_at;
-    let frame = $("#goaccess-container iframe");
-    if (!frame) {
-      clear(container);
-      frame = el("iframe", {
-        className: "goaccess-frame",
-        attrs: {
-          title: "Detailed GoAccess HTTP analytics",
-          sandbox: "allow-scripts",
-          loading: "lazy",
-        },
-      });
-      container.append(frame);
-    }
-    const privacy = meta.privacy || {};
-    const masking =
-      privacy.mask_internal_ips ||
-      (Array.isArray(privacy.mask_networks) && privacy.mask_networks.length > 0);
-    const skipped = Number(status.skipped_lines || 0);
-    let note = $(".goaccess-note", container);
-    if (!note) {
-      note = el("p", { className: "goaccess-note" });
-      container.append(note);
-    }
-    note.textContent =
-      "This report is generated by GoAccess and displayed in a sandboxed iframe. It cannot read this page or make network requests." +
-      (masking
-        ? " Masked internal clients appear as 0.0.0.0 (or ::) because GoAccess requires a valid address."
-        : "") +
-      (skipped > 0
-        ? ` ${fmt(skipped)} HTTP event(s) were omitted because they could not be represented in the GoAccess report.`
-        : "");
-    if (frame.dataset.snapshot !== stamp) {
-      frame.dataset.snapshot = stamp;
-      frame.src = `/goaccess?t=${encodeURIComponent(stamp)}`;
-    }
-    return;
-  }
-
-  clear(container);
-  if (status.enabled && status.error) {
-    container.append(
-      emptyState(
-        "GoAccess is enabled but did not produce a report",
-        status.error + (status.detail ? ` ${status.detail}` : "")
-      )
-    );
-  } else if (status.enabled) {
-    container.append(emptyState("GoAccess is starting", "The first report will appear after the next refresh."));
-  } else {
-    container.append(
-      emptyState(
-        "GoAccess is optional",
-        "Set GOACCESS_ENABLED=true in .env to generate a detailed HTTP report. The built-in HTTP view already works without GoAccess."
-      )
-    );
   }
 }
 
@@ -838,7 +863,6 @@ function renderAll() {
   renderTls();
   renderHttp();
   renderRequests();
-  renderGoAccess();
   renderYouBanners();
   renderServerCard();
   renderWarnings();
@@ -908,6 +932,13 @@ function setupFilters() {
   const requestSearch = $("#request-search");
   if (requestSearch) {
     requestSearch.addEventListener("input", () => renderRequests());
+  }
+  const httpIpSearch = $("#http-ip-search");
+  if (httpIpSearch) {
+    httpIpSearch.addEventListener("input", () => {
+      state.httpIpFilter = httpIpSearch.value;
+      renderHttpIps();
+    });
   }
 }
 
