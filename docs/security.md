@@ -185,6 +185,28 @@ The `X-Forwarded-For` header is read only after the direct peer passes the
 trusted-proxy check. Invalid entries are ignored. The app does not use the
 forwarded value for authentication or authorization.
 
+## Internal IP masking
+
+`MASK_INTERNAL_IPS` is enabled by default. The app masks non-global client
+addresses before they enter the dashboard or the snapshot API:
+
+```text
+192.0.2.10      -> 192.0.x.x
+198.51.100.20   -> 198.51.x.x
+fd00:1234::1    -> fd00:1234::x
+2001:db8::1     -> 2001:db8::x
+```
+
+Public addresses such as `8.8.8.8` remain visible. Masked rows are grouped by
+their masked prefix, so the visitor table loses host-level detail for internal
+networks by design. The same masking is applied to IP literals in requested
+paths, SNI/backend names and the optional GoAccess input.
+
+When the viewer's own address is internal, the `THIS IS YOU` self-highlight is
+disabled. Highlighting a masked group would match several different clients.
+Set `MASK_INTERNAL_IPS=false` only when raw internal IPs are required for
+analysis and the dashboard access is tightly controlled.
+
 ## GeoIP privacy
 
 MaxMind GeoLite2 lookups are local file reads. Client IP addresses are not sent

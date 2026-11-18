@@ -179,7 +179,10 @@
       <section class="card">
         <div class="card-head">
           <div><div class="card-title">Client IPs</div><div class="card-sub">Newest activity first · HTTP destinations are backend names; TLS destinations are SNI hostnames</div></div>
-          <span class="badge info">No third-party lookup</span>
+          <div class="card-actions">
+            <span class="badge info hidden" id="visitor-mask-badge">Internal IPs masked</span>
+            <span class="badge info">No third-party lookup</span>
+          </div>
         </div>
         <div class="filter-bar">
           <label class="sr-only" for="visitor-search">Filter visitors</label>

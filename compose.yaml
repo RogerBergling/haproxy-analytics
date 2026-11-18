@@ -21,6 +21,7 @@ services:
       REFRESH_SECONDS: ${REFRESH_SECONDS:-60}
       MAX_LOG_BYTES: ${MAX_LOG_BYTES:-33554432}
       MAX_VISITOR_ROWS: ${MAX_VISITOR_ROWS:-5000}
+      MASK_INTERNAL_IPS: ${MASK_INTERNAL_IPS:-true}
       GEOIP_CITY_DB: ${GEOIP_CITY_DB:-/geoip/GeoLite2-City.mmdb}
       GEOIP_ASN_DB: ${GEOIP_ASN_DB:-/geoip/GeoLite2-ASN.mmdb}
       DEMO_MODE: ${DEMO_MODE:-false}

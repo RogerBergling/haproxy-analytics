@@ -15,6 +15,7 @@ from .geoip import GeoResolver
 from .goaccess import GoAccessRunner
 from .logsource import SyslogServer, read_log_tail
 from .parser import parse_line
+from .privacy import mask_http_line
 from .version import version_info
 
 LOGGER = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ def _empty_payload(message: str) -> dict[str, Any]:
             "source": {"file": {"exists": False}, "syslog": {"enabled": False}},
             "geoip": {"city": False, "asn": False},
             "goaccess": {"enabled": False, "available": False, "generated": False, "error": None},
+            "privacy": {"mask_internal_ips": True},
             "parser": {"unparsed_lines": 0, "repeated_groups": 0, "events": 0},
             "warnings": [message],
             "duration_ms": 0,
@@ -60,7 +62,13 @@ def _empty_payload(message: str) -> dict[str, Any]:
         },
         "tls": {"total": 0, "snis": [], "no_sni": 0, "countries": [], "asns": [], "recent": []},
         "geo": {"countries": [], "cities": [], "points": [], "country_count": 0},
-        "visitors": {"total": 0, "rows": [], "truncated": False},
+        "visitors": {
+            "total": 0,
+            "raw_total": 0,
+            "masked": False,
+            "rows": [],
+            "truncated": False,
+        },
         "parser": {"unparsed_lines": 0, "repeated_groups": 0, "events": 0},
     }
 
@@ -187,7 +195,11 @@ class SnapshotService:
             geo_has_city = geo.has_city
             geo_has_asn = geo.has_asn
             geo_warnings = list(geo.warnings)
-            aggregator = Aggregator(geo, self.settings.max_visitor_rows)
+            aggregator = Aggregator(
+                geo,
+                self.settings.max_visitor_rows,
+                mask_internal_ips=self.settings.mask_internal_ips,
+            )
             goaccess_lines: list[str] = []
             goaccess_cap = self.settings.goaccess_max_lines
 
@@ -205,7 +217,10 @@ class SnapshotService:
                         remaining = goaccess_cap - len(goaccess_lines)
                         if remaining > 0:
                             repeat = min(parsed.event.count, remaining)
-                            goaccess_lines.extend([parsed.http_message] * repeat)
+                            http_message = parsed.http_message
+                            if self.settings.mask_internal_ips:
+                                http_message = mask_http_line(http_message)
+                            goaccess_lines.extend([http_message] * repeat)
             finally:
                 geo.close()
 
@@ -250,6 +265,7 @@ class SnapshotService:
                     "asn_path": str(self.settings.geoip_asn_db),
                 },
                 "goaccess": goaccess_status,
+                "privacy": {"mask_internal_ips": self.settings.mask_internal_ips},
                 "parser": data["parser"],
                 "warnings": warnings,
                 "duration_ms": round((time.monotonic() - started) * 1000, 1),

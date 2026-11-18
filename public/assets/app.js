@@ -2,6 +2,8 @@ const state = {
   snapshot: null,
   version: null,
   myIp: null,
+  whoamiMasked: false,
+  maskedIp: null,
   view: "overview",
   visitorFilter: "",
   countryFilter: "",
@@ -372,6 +374,10 @@ function renderVisitors() {
   if (!body || !state.snapshot) return;
   clear(body);
   const visitors = state.snapshot.visitors.rows || [];
+  const masked = Boolean(state.snapshot.visitors.masked);
+  const unit = masked ? "masked IP groups" : "IP addresses";
+  const rawTotal = Number(state.snapshot.visitors.raw_total) || state.snapshot.visitors.total;
+  const rawSuffix = masked ? ` · ${fmt(rawTotal)} observed IPs` : "";
   const term = state.visitorFilter.toLowerCase().trim();
   const visible = visitors.filter((visitor) => !term || String(visitor.search || "").includes(term));
   for (const visitor of visible) {
@@ -419,13 +425,15 @@ function renderVisitors() {
     : "";
   if (count) {
     count.textContent = term
-      ? `${fmt(visible.length)} of ${fmt(visitors.length)} IP addresses${capSuffix}`
-      : `${fmt(visitors.length)} IP addresses${capSuffix}`;
+      ? `${fmt(visible.length)} of ${fmt(visitors.length)} ${unit}${capSuffix}${rawSuffix}`
+      : `${fmt(visitors.length)} ${unit}${capSuffix}${rawSuffix}`;
   }
   const pill = $("#visitor-total-pill");
-  if (pill) pill.textContent = `${fmt(state.snapshot.visitors.total)} IP addresses`;
+  if (pill) pill.textContent = `${fmt(state.snapshot.visitors.total)} ${unit}`;
   const navBadge = $("#nav-visitor-count");
   if (navBadge) navBadge.textContent = fmt(state.snapshot.visitors.total);
+  const maskBadge = $("#visitor-mask-badge");
+  if (maskBadge) maskBadge.classList.toggle("hidden", !masked);
 }
 
 function renderRecentTls(target, rows) {
@@ -568,15 +576,22 @@ function renderYouBanners() {
   const myIp = state.myIp;
   const visitor = myIp && state.snapshot ? state.snapshot.visitors.rows.find((row) => row.ip === myIp) : null;
   for (const banner of banners) {
+    banner.classList.remove("hidden");
+    const headline = $("[data-you-headline]", banner);
+    const description = $("[data-you-description]", banner);
+    const button = $("[data-find-me]", banner);
+    if (state.whoamiMasked) {
+      banner.classList.add("no-match");
+      if (headline) headline.textContent = "Your internal address is masked";
+      if (description) description.textContent = `Self-highlight is disabled while ${state.maskedIp || "your internal address"} is masked. Public addresses remain unmasked.`;
+      if (button) button.classList.add("hidden");
+      continue;
+    }
     if (!myIp) {
       banner.classList.add("hidden");
       continue;
     }
-    banner.classList.remove("hidden");
     banner.classList.toggle("no-match", !visitor);
-    const headline = $("[data-you-headline]", banner);
-    const description = $("[data-you-description]", banner);
-    const button = $("[data-find-me]", banner);
     if (visitor) {
       if (headline) headline.textContent = `You are in this snapshot: ${myIp}`;
       if (description) description.textContent = "This IP appears in the HAProxy log. NAT, a VPN or a proxy can make one IP represent several people.";
@@ -789,7 +804,15 @@ async function loadWhoami() {
   try {
     const answer = await fetchJSON("/api/whoami");
     if (answer && typeof answer.ip === "string" && answer.ip) {
-      state.myIp = answer.ip;
+      if (answer.masked) {
+        state.myIp = null;
+        state.maskedIp = answer.ip;
+        state.whoamiMasked = true;
+      } else {
+        state.myIp = answer.ip;
+        state.maskedIp = null;
+        state.whoamiMasked = false;
+      }
       renderYouBanners();
       renderVisitors();
       renderMap("overview");
@@ -797,6 +820,8 @@ async function loadWhoami() {
     }
   } catch (error) {
     state.myIp = null;
+    state.maskedIp = null;
+    state.whoamiMasked = false;
   }
 }
 

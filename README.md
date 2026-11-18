@@ -18,7 +18,8 @@ HAProxy Analytics is a small self-hosted service. It reads HAProxy logs from a m
 - **TLS/SNI analytics** from a TCP frontend that captures `req.ssl_sni`: hostnames, countries, ASNs and recent connections.
 - **Geo access** view: a world map plus searchable country and city tables, styled to match the other self-hosted apps in this workspace.
 - **Visitor table** grouped by observed client IP: SNI hostnames, HTTP backends, event counts and last-seen time.
-- **"This is you"** highlight through the local `/api/whoami` endpoint. Forwarded addresses are trusted only from explicitly configured proxies.
+- **Internal IP masking** enabled by default: private, loopback and documentation addresses are masked in the dashboard and API; public addresses remain visible.
+- **"This is you"** highlight through the local `/api/whoami` endpoint. Forwarded addresses are trusted only from explicitly configured proxies; internal viewers see a masked notice instead of a highlight.
 - **Optional GoAccess report** in a sandboxed iframe for operators who already use GoAccess.
 - **Optional syslog receiver** for HAProxy hosts that cannot mount a log file locally. Disabled by default, with a source allowlist and optional TCP TLS/mTLS.
 - **Graceful degradation**: no MaxMind database, no GoAccess and no log file do not crash the dashboard; they produce clear warnings and an empty state.
@@ -137,6 +138,7 @@ Copy [`.env.example`](.env.example) to `.env`. The most important settings:
 | `HAPROXY_LOG_FILE` | `/logs/haproxy.log` | Log path inside the container. Empty disables file mode. |
 | `REFRESH_SECONDS` | `60` | Snapshot rebuild interval. |
 | `MAX_LOG_BYTES` | `33554432` | Tail window read from the log file. |
+| `MASK_INTERNAL_IPS` | `true` | Mask non-global client IPs (private, loopback, documentation) in the dashboard and API. Public IPs remain visible. |
 | `GEOIP_DIR` | `./geoip` | Host directory containing `GeoLite2-*.mmdb`. |
 | `GEOIP_CITY_DB` / `GEOIP_ASN_DB` | `/geoip/...` | Database paths inside the container. |
 | `TRUSTED_PROXIES` | empty | Comma-separated proxy IPs/CIDRs allowed to supply `X-Forwarded-For`. |
@@ -156,6 +158,7 @@ The full reference is in [docs/deployment.md](docs/deployment.md). Never commit 
 - **No third-party browser requests.** No CDN, external fonts, analytics, map tiles or IP-lookup service. A strict CSP blocks outbound connections.
 - **A local GeoIP lookup.** MaxMind databases are mounted files; client IPs are never sent to MaxMind or anyone else.
 - **Explicit proxy trust.** `X-Forwarded-For` is ignored unless the immediate peer is in `TRUSTED_PROXIES`.
+- **Internal IP masking.** Private/internal addresses are masked by default in the dashboard and API; public addresses remain visible.
 - **Bounded inputs.** Log tail size, visitor rows, syslog message size and GoAccess report size are all capped.
 - **Sandboxed GoAccess.** The optional report cannot read the parent page or make network requests.
 - **Secret scanning.** Gitleaks runs in CI. The repository contains only synthetic demo data.

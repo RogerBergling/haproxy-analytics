@@ -231,6 +231,7 @@ See [security.md](security.md) for the full checklist. The short version:
 - keep the app behind HAProxy with TLS and authentication;
 - keep `APP_BIND=127.0.0.1` unless you have a controlled private network;
 - keep `TRUSTED_PROXIES` and `SYSLOG_ALLOWED_NETWORKS` narrow;
+- keep `MASK_INTERNAL_IPS=true` unless raw internal client addresses are required;
 - use syslog TLS/mTLS across untrusted networks;
 - rotate credentials and certificates;
 - review the public repository before making it visible;

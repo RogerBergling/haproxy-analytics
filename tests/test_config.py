@@ -17,6 +17,7 @@ class ConfigTests(unittest.TestCase):
         self.assertIsNone(settings.syslog_listen)
         self.assertEqual(settings.trusted_proxies, ())
         self.assertFalse(settings.goaccess_enabled)
+        self.assertTrue(settings.mask_internal_ips)
 
     def test_empty_log_file_disables_file_source(self) -> None:
         with patch.dict(os.environ, {"HAPROXY_LOG_FILE": ""}, clear=True):

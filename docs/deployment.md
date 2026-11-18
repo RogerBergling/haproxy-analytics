@@ -74,6 +74,7 @@ uses the shell environment or CLI flags, not `.env` automatically.
 | `MAX_LOG_BYTES` | `33554432` | Read at most this many bytes from the end of the log. |
 | `REFRESH_SECONDS` | `60` | Snapshot rebuild interval. The browser also polls on this interval. |
 | `MAX_VISITOR_ROWS` | `5000` | Upper bound on returned visitor rows. |
+| `MASK_INTERNAL_IPS` | `true` | Mask non-global client IPs (private, loopback, documentation) in the dashboard and API. Public IPs remain visible. |
 | `GEOIP_DIR` | `./geoip` | Host directory mounted at `/geoip` read-only. |
 | `GEOIP_CITY_DB` | `/geoip/GeoLite2-City.mmdb` | City database path inside the container. |
 | `GEOIP_ASN_DB` | `/geoip/GeoLite2-ASN.mmdb` | ASN database path inside the container. |

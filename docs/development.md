@@ -103,6 +103,7 @@ The test suite covers:
 - bounded syslog buffers;
 - UDP/TCP receiver allowlists, size limits and TCP TLS;
 - GoAccess disabled mode, missing binary, fake report generation and size limit;
+- internal IP masking and masked visitor grouping;
 - snapshot counts, warnings, source modes and failure fallback;
 - HTTP routes, security headers, method rejection, traversal rejection,
   `/api/whoami` trust behavior, HEAD and version/health endpoints.

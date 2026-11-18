@@ -74,7 +74,10 @@ the error in `/healthz`.
 - `tls`: SNI hostnames, countries, ASNs and recent connections.
 - `geo`: countries, cities and map points with per-point IP lists for the
   self-highlight feature.
-- `visitors`: per-IP rows capped by `MAX_VISITOR_ROWS`.
+- `visitors`: per-IP rows capped by `MAX_VISITOR_ROWS`. When
+  `MASK_INTERNAL_IPS` is enabled, non-global addresses are masked and rows are
+  grouped by their masked prefix; `visitors.masked` and `visitors.raw_total`
+  describe the result.
 - `parser`: unparsed line and repeated-group counts.
 
 The API is same-origin and protected by the same network boundary as the HTML.

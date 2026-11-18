@@ -27,6 +27,7 @@ def base_settings(tmp_path: Path, **overrides: object) -> Settings:
         "syslog_host": None,
         "syslog_port": None,
         "trusted_proxies": (),
+        "mask_internal_ips": False,
         "refresh_seconds": 60,
     }
     values.update(overrides)

@@ -110,6 +110,7 @@ class Settings:
     refresh_seconds: int
     max_log_bytes: int
     max_visitor_rows: int
+    mask_internal_ips: bool
     geoip_city_db: Path
     geoip_asn_db: Path
     trusted_proxies: tuple[IPNetwork, ...]
@@ -189,6 +190,7 @@ class Settings:
             refresh_seconds=_env_int("REFRESH_SECONDS", 60, 1),
             max_log_bytes=_env_int("MAX_LOG_BYTES", 32 * 1024 * 1024, 1024),
             max_visitor_rows=_env_int("MAX_VISITOR_ROWS", 5000, 1),
+            mask_internal_ips=_env_bool("MASK_INTERNAL_IPS", True),
             geoip_city_db=_resolve_path(_env("GEOIP_CITY_DB"), Path("/geoip/GeoLite2-City.mmdb")),
             geoip_asn_db=_resolve_path(_env("GEOIP_ASN_DB"), Path("/geoip/GeoLite2-ASN.mmdb")),
             trusted_proxies=trusted,

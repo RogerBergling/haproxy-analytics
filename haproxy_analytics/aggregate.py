@@ -7,6 +7,7 @@ from typing import Any
 
 from .geoip import GeoResolver
 from .parser import HttpEvent, ParsedEvent, TlsEvent
+from .privacy import mask_ip, mask_text_ips
 
 _UNKNOWN_COUNTRIES = {"Unknown", "Private network", "-"}
 
@@ -14,9 +15,12 @@ _UNKNOWN_COUNTRIES = {"Unknown", "Private network", "-"}
 class Aggregator:
     """Collect counters and per-client details without storing raw log lines."""
 
-    def __init__(self, geo: GeoResolver, max_visitor_rows: int = 5000) -> None:
+    def __init__(
+        self, geo: GeoResolver, max_visitor_rows: int = 5000, mask_internal_ips: bool = False
+    ) -> None:
         self.geo = geo
         self.max_visitor_rows = max_visitor_rows
+        self.mask_internal_ips = mask_internal_ips
 
         self.http_total = 0
         self.tls_total = 0
@@ -160,6 +164,14 @@ class Aggregator:
     def _items(counter: Counter[str], limit: int) -> list[dict[str, Any]]:
         return [{"name": name, "count": count} for name, count in counter.most_common(limit)]
 
+    def _mask_counter(self, counter: Counter[str]) -> Counter[str]:
+        if not self.mask_internal_ips:
+            return counter
+        masked: Counter[str] = Counter()
+        for name, count in counter.items():
+            masked[mask_text_ips(name)] += count
+        return masked
+
     @staticmethod
     def _location(geo: dict[str, Any]) -> str:
         parts = [part for part in (geo["city"], geo["country"]) if part not in ("-", "")]
@@ -172,6 +184,9 @@ class Aggregator:
             count for status, count in self.http_status.items() if status[:1] in {"4", "5"}
         )
         known_sni = Counter({name: count for name, count in self.sni_counts.items() if name != "No SNI"})
+        if self.mask_internal_ips:
+            known_sni = self._mask_counter(known_sni)
+        http_backends = self._mask_counter(self.http_backends)
         total_events = self.http_total + self.tls_total
 
         visitor_rows: list[dict[str, Any]] = []
@@ -184,8 +199,14 @@ class Aggregator:
             reverse=True,
         ):
             geo = self._geo(ip)
-            snis = [[name, count] for name, count in self.ip_snis[ip].most_common()]
-            backends = [[name, count] for name, count in self.ip_backends[ip].most_common()]
+            snis = [
+                [name, count]
+                for name, count in self._mask_counter(self.ip_snis[ip]).most_common()
+            ]
+            backends = [
+                [name, count]
+                for name, count in self._mask_counter(self.ip_backends[ip]).most_common()
+            ]
             location = self._location(geo)
             last_seen = self.ip_last_seen.get(ip, "-")
             search = " ".join(
@@ -213,6 +234,67 @@ class Aggregator:
                     "last_seen": last_seen,
                     "search": search,
                 }
+            )
+
+        raw_total = len(all_ips)
+        if self.mask_internal_ips:
+            merged: dict[str, dict[str, Any]] = {}
+            for row in visitor_rows:
+                display_ip = mask_ip(row["ip"])
+                if display_ip not in merged:
+                    merged[display_ip] = {
+                        "ip": display_ip,
+                        "country": row["country"],
+                        "country_code": row["country_code"],
+                        "city": row["city"],
+                        "location": row["location"],
+                        "asn": row["asn"],
+                        "snis": Counter({name: count for name, count in row["snis"]}),
+                        "backends": Counter({name: count for name, count in row["backends"]}),
+                        "tls": 0,
+                        "http": 0,
+                        "last_seen": row["last_seen"],
+                    }
+                target = merged[display_ip]
+                target["tls"] += row["tls"]
+                target["http"] += row["http"]
+                target["snis"].update({name: count for name, count in row["snis"]})
+                target["backends"].update({name: count for name, count in row["backends"]})
+                if row["last_seen"] > target["last_seen"]:
+                    target["last_seen"] = row["last_seen"]
+
+            visitor_rows = []
+            for display_ip, row in merged.items():
+                snis = [[name, count] for name, count in row["snis"].most_common()]
+                backends = [[name, count] for name, count in row["backends"].most_common()]
+                search = " ".join(
+                    [
+                        display_ip,
+                        row["location"],
+                        row["asn"],
+                        " ".join(name for name, _ in snis),
+                        " ".join(name for name, _ in backends),
+                        row["last_seen"],
+                    ]
+                ).lower()
+                visitor_rows.append(
+                    {
+                        "ip": display_ip,
+                        "country": row["country"],
+                        "country_code": row["country_code"],
+                        "city": row["city"],
+                        "location": row["location"],
+                        "asn": row["asn"],
+                        "snis": snis,
+                        "backends": backends,
+                        "tls": row["tls"],
+                        "http": row["http"],
+                        "last_seen": row["last_seen"],
+                        "search": search,
+                    }
+                )
+            visitor_rows.sort(
+                key=lambda item: (item["last_seen"], item["tls"] + item["http"]), reverse=True
             )
 
         visitor_total = len(visitor_rows)
@@ -267,12 +349,24 @@ class Aggregator:
                     "http": stats["http"],
                     "tls": stats["tls"],
                     "total": total,
-                    "ips": sorted(stats["ips"])[:2000],
+                    "ips": sorted(
+                        {
+                            mask_ip(ip) if self.mask_internal_ips else ip
+                            for ip in stats["ips"]
+                        }
+                    )[:2000],
                 }
             )
         points.sort(key=lambda item: item["total"], reverse=True)
 
         latest_seen = max(self.ip_last_seen.values(), default="-")
+
+        if self.mask_internal_ips:
+            http_paths: Counter[str] = Counter()
+            for name, count in self.http_paths.items():
+                http_paths[mask_text_ips(name)] += count
+        else:
+            http_paths = self.http_paths
 
         return {
             "kpis": {
@@ -284,7 +378,7 @@ class Aggregator:
                 "bytes": self.bytes_out,
                 "geo_points": len(self.map_points),
                 "sni_hostnames": len(known_sni),
-                "http_backends": len(self.http_backends),
+                "http_backends": len(http_backends),
                 "no_sni": self.sni_counts.get("No SNI", 0),
                 "latest_seen": latest_seen,
             },
@@ -294,8 +388,8 @@ class Aggregator:
                 "errors": errors,
                 "methods": self._items(self.http_methods, 10),
                 "statuses": self._items(self.http_status, 12),
-                "backends": self._items(self.http_backends, 15),
-                "paths": self._items(self.http_paths, 30),
+                "backends": self._items(http_backends, 15),
+                "paths": self._items(http_paths, 30),
                 "countries": self._items(self.http_countries, 15),
                 "asns": self._items(self.http_asns, 15),
             },
@@ -308,8 +402,8 @@ class Aggregator:
                 "recent": [
                     {
                         "time": when,
-                        "ip": ip,
-                        "sni": sni,
+                        "ip": mask_ip(ip) if self.mask_internal_ips else ip,
+                        "sni": mask_text_ips(sni) if self.mask_internal_ips else sni,
                         "country": country,
                         "city": city,
                     }
@@ -324,6 +418,8 @@ class Aggregator:
             },
             "visitors": {
                 "total": visitor_total,
+                "raw_total": raw_total,
+                "masked": self.mask_internal_ips,
                 "rows": visitor_rows,
                 "truncated": visitor_total > len(visitor_rows),
             },

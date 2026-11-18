@@ -100,6 +100,46 @@ class ServerTests(unittest.TestCase):
                 self.assertEqual(status, 200)
                 self.assertEqual(json.loads(body)["ip"], "203.0.113.5")
 
+
+    def test_whoami_masks_internal_ip(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            settings = demo_settings(Path(temp), mask_internal_ips=True)
+            with running_server(settings) as (port, _service):
+                status, _headers, body = request(port, "GET", "/api/whoami")
+                payload = json.loads(body)
+                self.assertEqual(status, 200)
+                self.assertEqual(payload["ip"], "127.0.x.x")
+                self.assertTrue(payload["masked"])
+
+    def test_whoami_leaves_public_ip_unmasked(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            settings = demo_settings(
+                Path(temp),
+                mask_internal_ips=True,
+                trusted_proxies=(ipaddress.ip_network("127.0.0.1/32"),),
+            )
+            with running_server(settings) as (port, _service):
+                status, _headers, body = request(
+                    port,
+                    "GET",
+                    "/api/whoami",
+                    headers={"X-Forwarded-For": "8.8.8.8"},
+                )
+                payload = json.loads(body)
+                self.assertEqual(status, 200)
+                self.assertEqual(payload["ip"], "8.8.8.8")
+                self.assertFalse(payload["masked"])
+
+    def test_snapshot_reports_masking(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            settings = demo_settings(Path(temp), mask_internal_ips=True)
+            with running_server(settings) as (port, _service):
+                status, _headers, body = request(port, "GET", "/api/snapshot")
+                payload = json.loads(body)
+                self.assertEqual(status, 200)
+                self.assertTrue(payload["visitors"]["masked"])
+                self.assertTrue(payload["meta"]["privacy"]["mask_internal_ips"])
+
     def test_health_and_version(self) -> None:
         with tempfile.TemporaryDirectory() as temp, running_server(demo_settings(Path(temp))) as (port, _service):
             status, _headers, body = request(port, "GET", "/healthz")
