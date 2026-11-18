@@ -323,12 +323,22 @@ class GoAccessRunner:
                 return None, status
 
             if result.returncode != 0:
-                detail = (result.stderr or result.stdout or "").strip().splitlines()
-                if detail:
-                    LOGGER.warning("GoAccess failed: %s", detail[-1][:500])
-                status["detail"] = self._error_detail(
-                    result.stderr or result.stdout or "", result.returncode
-                )
+                stderr = result.stderr or result.stdout or ""
+                detail = stderr.strip().splitlines()
+                error_line = ""
+                for line in detail:
+                    stripped = line.strip()
+                    if any(
+                        marker in stripped
+                        for marker in ("Token ", "Fatal error", "Unable to open", "Unknown option")
+                    ):
+                        error_line = stripped
+                        break
+                if not error_line and detail:
+                    error_line = detail[-1].strip()
+                if error_line:
+                    LOGGER.warning("GoAccess failed: %s", error_line[:500])
+                status["detail"] = self._error_detail(stderr, result.returncode)
                 status["error"] = (
                     "GoAccess rejected the HTTP log format. Check the GoAccess configuration "
                     "and the HAProxy log format."
