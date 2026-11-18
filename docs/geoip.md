@@ -57,27 +57,135 @@ them in a screenshot.
 
 ### Option A: the Compose updater profile
 
+Run this on the **Docker host**, from the directory containing `compose.yaml`
+and `.env`:
+
 ```bash
 docker compose --profile geoip run --rm geoip-update
 ```
 
-The updater writes into `GEOIP_DIR`. Run it on a schedule with cron, a systemd
-timer or your existing automation. The app reads the files on its next refresh.
+This is a **one-shot** container. It downloads the databases once, writes them
+into the host directory configured by `GEOIP_DIR`, and exits. It does not create
+a background service or a timer, and the `GEOIPUPDATE_FREQUENCY: "0"` setting in
+`compose.yaml` intentionally means "run once".
 
-### Option B: the host's `geoipupdate`
+The dashboard container does not need restarting after an update. It reopens
+the MMDB files on its next snapshot refresh.
+
+### Automatic updates on the Docker host
+
+Choose **one** scheduler. Do not run the Compose profile and the host
+`geoipupdate` package against the same directory at the same time.
+
+#### Option A1: cron
+
+Run as root on the Docker host:
+
+```bash
+sudo crontab -e
+```
+
+Add a weekly job. Replace `/path/to/haproxy-analytics` with the real Compose
+directory:
+
+```cron
+0 4 * * 1 cd /path/to/haproxy-analytics && /usr/bin/docker compose --profile geoip run --rm geoip-update >> /var/log/haproxy-analytics-geoip.log 2>&1
+```
+
+Notes:
+
+- Use the absolute Docker path from `command -v docker`; cron has a minimal
+  `PATH`.
+- Root cron is simplest if Docker requires `sudo`. If your user is in the
+  `docker` group, a user crontab works too.
+- `0 4 * * 1` means every Monday at 04:00. Weekly is normally enough for
+  GeoLite2.
+- `--rm` removes the temporary updater container after it exits.
+
+Verify the schedule:
+
+```bash
+sudo crontab -l
+```
+
+Check the log and file timestamps after the first run:
+
+```bash
+tail -50 /var/log/haproxy-analytics-geoip.log
+ls -lh --full-time /path/to/haproxy-analytics/geoip/*.mmdb
+```
+
+#### Option A2: systemd timer
+
+Create `/etc/systemd/system/haproxy-analytics-geoip.service`:
+
+```ini
+[Unit]
+Description=Update GeoLite2 databases for HAProxy Analytics
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/path/to/haproxy-analytics
+ExecStart=/usr/bin/docker compose --profile geoip run --rm geoip-update
+```
+
+Create `/etc/systemd/system/haproxy-analytics-geoip.timer`:
+
+```ini
+[Unit]
+Description=Weekly GeoLite2 update for HAProxy Analytics
+
+[Timer]
+OnCalendar=Mon *-*-* 04:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+Enable and test it:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now haproxy-analytics-geoip.timer
+
+# Run the update immediately once:
+sudo systemctl start haproxy-analytics-geoip.service
+sudo journalctl -u haproxy-analytics-geoip.service -n 50 --no-pager
+
+# Check the next scheduled run:
+systemctl list-timers --all haproxy-analytics-geoip.timer
+```
+
+Use the real Docker path from `command -v docker`, and the real Compose
+directory in `WorkingDirectory`.
+
+#### Option A3: the host's `geoipupdate` package
 
 On Debian/Ubuntu, install `geoipupdate`, configure `/etc/GeoIP.conf` with your
-credentials, and point `DatabaseDirectory` at the directory mounted into the
-container. Then use the package's timer or your own schedule:
+credentials, and point `DatabaseDirectory` at the host directory mounted into
+the container:
+
+```conf
+AccountID YOUR_ACCOUNT_ID
+LicenseKey YOUR_LICENSE_KEY
+EditionIDs GeoLite2-City GeoLite2-ASN
+DatabaseDirectory /path/to/haproxy-analytics/geoip
+```
+
+Then use the package-provided timer or your own schedule:
 
 ```bash
 sudo geoipupdate -v
+sudo systemctl enable --now geoipupdate.timer
 systemctl list-timers --all geoipupdate.timer
 ```
 
-Do not copy `/etc/GeoIP.conf` into the repository.
+Do not copy `/etc/GeoIP.conf` into the repository. Protect it with restrictive
+permissions.
 
-### Option C: manual download
+### Option B: manual download
 
 Download the `.tar.gz` editions from your MaxMind account, extract the MMDB
 files and place them in `GEOIP_DIR`. This is suitable for an air-gapped host if

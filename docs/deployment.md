@@ -135,6 +135,10 @@ chmod 0644 geoip/*.mmdb
 docker compose --profile geoip run --rm geoip-update
 ```
 
+The Compose profile is **one-shot**; it does not schedule itself. For cron and
+systemd timer examples on the Docker host, see
+[geoip.md](geoip.md#automatic-updates-on-the-docker-host).
+
 The app never downloads databases and never sends client IPs to MaxMind.
 
 ### GoAccess
