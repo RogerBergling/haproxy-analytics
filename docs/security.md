@@ -202,6 +202,11 @@ their masked prefix, so the visitor table loses host-level detail for internal
 networks by design. The same masking is applied to IP literals in requested
 paths, SNI/backend names and the optional GoAccess input.
 
+GoAccess validates the client field as an IP address and rejects `x.x.x.x`.
+For the optional GoAccess report only, the masked client is therefore written
+as `0.0.0.0` (`::` for IPv6). The raw address is never passed to GoAccess, and
+all masked clients appear as that one placeholder visitor in its report.
+
 When the viewer's own address is internal, the `THIS IS YOU` self-highlight is
 disabled. Highlighting a masked group would match several different clients.
 Set `MASK_INTERNAL_IPS=false` only when raw internal IPs are required for

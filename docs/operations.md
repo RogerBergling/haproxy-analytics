@@ -147,6 +147,13 @@ The app passes only HTTP lines (with the syslog prefix removed) to GoAccess. TLS
 SNI lines are not GoAccess input. A non-zero exit produces a generic dashboard
 message and a detailed local log entry.
 
+GoAccess validates the client address (`%h`), so the dashboard's `x.x.x.x` mask
+cannot be used in its input. When masking is active, the app writes masked
+clients as `0.0.0.0` (`::` for IPv6) in the GoAccess file. The report stays
+parseable, no raw internal address reaches GoAccess, and all masked clients are
+grouped as one `0.0.0.0` visitor. The main dashboard still shows them as
+`x.x.x.x`.
+
 Do not embed the GoAccess HTML directly into the main page. The sandbox is part
 of the security model.
 

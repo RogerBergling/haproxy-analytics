@@ -122,6 +122,7 @@ class SnapshotTests(unittest.TestCase):
             service.refresh_once()
             html = service.goaccess_html() or ""
 
+        self.assertIn("0.0.0.0:1234", html)
         self.assertIn("192.0.x.x", html)
         self.assertNotIn("192.0.2.20", html)
 

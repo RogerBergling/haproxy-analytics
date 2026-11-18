@@ -76,17 +76,38 @@ class PrivacyTests(unittest.TestCase):
                 '192.0.2.20:1234 [18/Nov/2026:00:00:00.000] ft_https bk_app/app1 '
                 '0/0/1/2/3 200 1 "GET http://192.0.2.20/admin HTTP/1.1"'
             ),
-            '192.0.x.x:1234 [18/Nov/2026:00:00:00.000] ft_https bk_app/app1 '
+            '0.0.0.0:1234 [18/Nov/2026:00:00:00.000] ft_https bk_app/app1 '
             '0/0/1/2/3 200 1 "GET http://192.0.x.x/admin HTTP/1.1"',
         )
         self.assertEqual(
             mask_http_line('2001:db8::10:1234 rest'),
-            '2001:db8::x:1234 rest',
+            '[::]:1234 rest',
         )
         self.assertEqual(
             mask_http_line('[2001:db8::10]:1234 rest'),
-            '[2001:db8::x]:1234 rest',
+            '[::]:1234 rest',
         )
+
+    def test_goaccess_client_field_is_a_parseable_address(self) -> None:
+        lines = (
+            '192.0.2.20:1234 [18/Nov/2026:00:00:00.000] ft_https bk_app/app1 '
+            '0/0/1/2/3 200 1 "GET / HTTP/1.1"',
+            '[2001:db8::10]:1234 [18/Nov/2026:00:00:00.000] ft_https bk_app/app1 '
+            '0/0/1/2/3 200 1 "GET / HTTP/1.1"',
+            '2001:db8::10:1234 [18/Nov/2026:00:00:00.000] ft_https bk_app/app1 '
+            '0/0/1/2/3 200 1 "GET / HTTP/1.1"',
+        )
+        for line in lines:
+            for full in (False, True):
+                masked = mask_http_line(line, full=full)
+                client = masked.split(" ", 1)[0]
+                host, separator, port = client.rpartition(":")
+                self.assertTrue(separator)
+                self.assertTrue(port.isdigit())
+                if host.startswith("["):
+                    host = host[1:-1]
+                address = ipaddress.ip_address(host)
+                self.assertFalse(address.is_global, masked)
 
     def test_internal_ip_in_text_is_masked(self) -> None:
         self.assertEqual(

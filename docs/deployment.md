@@ -165,6 +165,10 @@ served in a sandboxed iframe. If your HAProxy `log-format` is not the standard
 `option httplog` format, mount a matching GoAccess configuration and set
 `GOACCESS_CONFIG` to its container path. See [operations.md](operations.md#goaccess).
 
+GoAccess requires a valid IP in its client field, so masked clients are passed
+as `0.0.0.0` (`::` for IPv6) instead of `x.x.x.x`. The report groups them as one
+visitor and never receives the raw internal address.
+
 ### Syslog receiver
 
 The receiver is disabled by default. To let a remote HAProxy/rsyslog push events
