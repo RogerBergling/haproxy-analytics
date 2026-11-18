@@ -62,6 +62,13 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    # Cap container stdout/stderr on the Docker host. Request data is not logged
+    # here, but startup and error messages should never fill the host disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
     # Pin a reviewed digest in production. Update explicitly with `docker compose pull`.
     pull_policy: if_not_present

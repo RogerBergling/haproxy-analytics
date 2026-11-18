@@ -181,6 +181,57 @@ The app keeps counters and per-IP details in memory, not raw lines. A very large
 unique-IP or unique-path set still costs memory. Monitor the container and raise
 `REFRESH_SECONDS` before increasing every limit.
 
+## Storage and disk usage
+
+The syslog receiver is **memory-only**:
+
+- Accepted messages are stored in a bounded in-memory ring,
+  `SYSLOG_BUFFER_LINES` (default 200,000).
+- Nothing is written to disk for syslog mode.
+- A restart clears the ring.
+- When the ring is full, the oldest lines are dropped. The app keeps running,
+  increments the `dropped` counter and shows a snapshot warning.
+- Messages larger than `SYSLOG_MAX_MESSAGE_BYTES` are dropped and counted.
+- Large rings consume RAM, not disk. 200,000 full-size 64 KB messages would be
+  enormous; real HAProxy lines are much smaller, but the limit still matters.
+
+Other storage paths:
+
+- **File mode** only reads the mounted log. It never writes to it.
+- **Snapshot data** is in memory.
+- **GoAccess** uses a temporary directory under `/tmp`. Compose mounts `/tmp`
+  as a 32 MB tmpfs. If it fills, GoAccess fails for that refresh; the built-in
+  HTTP/TLS dashboard continues and the snapshot shows an error.
+- **Docker container logs** are written by the Docker logging driver on the
+  host. The supplied Compose file caps `json-file` logs at 10 MB × 3 files.
+- **GeoIP databases** live in the host `./geoip` directory and are typically
+  tens of MB. The optional updater writes them there.
+
+If the host disk is full:
+
+- The app's own syslog/snapshot path does not require disk space.
+- Docker may fail to write container logs, create temporary files or restart
+  the container.
+- GoAccess report generation fails, but the core dashboard can continue.
+- A container restart can fail until Docker has writable disk space again.
+
+If host memory is exhausted, the kernel can OOM-kill the container. That loses
+the in-memory syslog ring.
+
+Monitor:
+
+```bash
+df -h
+docker system df
+du -sh geoip/
+docker stats haproxy-analytics
+curl -s http://127.0.0.1:8009/api/snapshot \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["meta"]["source"]["syslog"]); print(d["meta"]["warnings"])'
+```
+
+For durable history, keep a central rsyslog file or run the app in file mode.
+The built-in syslog receiver is a live buffer, not a log store.
+
 ## Health, version and logs
 
 ```bash
