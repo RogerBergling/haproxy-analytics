@@ -57,6 +57,10 @@
         <span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
         HTTP
       </button>
+      <button class="nav-item" data-view="requests" type="button">
+        <span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M8 6h12M8 12h12M8 18h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="4.5" cy="6" r="1.1" fill="currentColor"/><circle cx="4.5" cy="12" r="1.1" fill="currentColor"/><circle cx="4.5" cy="18" r="1.1" fill="currentColor"/></svg></span>
+        Requests
+      </button>
       <button class="nav-item" data-view="goaccess" type="button">
         <span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 19V5h14v14H5z" stroke="currentColor" stroke-width="1.5"/><path d="M8 15l2.4-3 2 1.8L16 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
         GoAccess
@@ -313,6 +317,47 @@
         <div class="table-wrap table-scroll">
           <table class="data-table"><thead><tr><th>Path</th><th class="number-cell">Requests</th></tr></thead><tbody id="http-paths"></tbody></table>
         </div>
+      </section>
+    </section>
+
+    <section class="view hidden" id="view-requests" data-view-panel="requests">
+      <div class="page-head">
+        <div>
+          <div class="page-title">HTTP requests</div>
+          <div class="page-sub">Newest parsed HTTP requests. Passthrough TLS cannot reveal URLs or request data.</div>
+        </div>
+        <div class="head-actions"><span class="pill" id="requests-pill">0 rows</span></div>
+      </div>
+
+      <section class="card">
+        <div class="card-head">
+          <div><div class="card-title">All requests</div><div class="card-sub" id="requests-note">Newest first</div></div>
+          <span class="badge info">Parsed events</span>
+        </div>
+        <div class="filter-bar">
+          <label class="sr-only" for="request-search">Filter requests</label>
+          <input class="search-input" id="request-search" type="search" placeholder="Filter IP, path, status, backend, country…" autocomplete="off">
+          <span class="result-count" id="request-count">0 requests</span>
+        </div>
+        <div class="table-wrap table-scroll request-scroll">
+          <table class="data-table request-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Client</th>
+                <th>Country / city</th>
+                <th>Status</th>
+                <th>Request</th>
+                <th class="number-cell">Bytes</th>
+                <th>Frontend</th>
+                <th>Backend / server</th>
+                <th>Protocol</th>
+              </tr>
+            </thead>
+            <tbody id="request-rows"></tbody>
+          </table>
+        </div>
+        <div class="card-body"><p class="card-sub">Repeated syslog groups are shown once with a multiplier. Query strings may contain sensitive values. Rows are capped by <code>MAX_REQUEST_ROWS</code>; the full count is in the HTTP analytics view.</p></div>
       </section>
     </section>
 

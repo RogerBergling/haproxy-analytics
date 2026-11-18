@@ -180,6 +180,13 @@ grouped as one `0.0.0.0` visitor. The main dashboard still shows them as
 Do not embed the GoAccess HTML directly into the main page. The sandbox is part
 of the security model.
 
+The **Requests** tab is independent of GoAccess. It shows the newest
+`MAX_REQUEST_ROWS` parsed HTTP events with time, client address and port,
+country/city, request, status, bytes, frontend, backend/server and protocol,
+plus a text filter. It uses the same masking as the rest of the dashboard, so
+internal addresses appear as their configured mask rather than the GoAccess
+`0.0.0.0` placeholder.
+
 ## Log rotation
 
 The app reads the current file, not a directory or a glob. Options:
@@ -202,6 +209,7 @@ current file. This is expected for a current-file reader.
 | `MAX_LOG_BYTES` | Tail window; the main CPU and memory bound. |
 | `REFRESH_SECONDS` | How often the full tail is re-parsed. |
 | `MAX_VISITOR_ROWS` | Maximum visitor rows in the snapshot/API. |
+| `MAX_REQUEST_ROWS` | Newest individual HTTP requests retained for the Requests view/API. |
 | `SYSLOG_BUFFER_LINES` | In-memory syslog history. |
 | `SYSLOG_MAX_MESSAGE_BYTES` | Per-message cap. |
 | `GOACCESS_MAX_LINES` | HTTP lines passed to GoAccess. |

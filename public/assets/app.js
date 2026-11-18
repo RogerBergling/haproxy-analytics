@@ -18,6 +18,7 @@ const VIEW_TITLES = {
   geo: "Geo access",
   tls: "TLS / SNI",
   http: "HTTP analytics",
+  requests: "Requests",
   goaccess: "GoAccess",
   security: "Security & privacy",
 };
@@ -509,6 +510,94 @@ function renderHttp() {
   }
 }
 
+function statusBadgeClass(status) {
+  const code = String(status || "");
+  if (code.startsWith("2")) return "ok";
+  if (code.startsWith("3")) return "info";
+  if (code.startsWith("4")) return "warn";
+  if (code.startsWith("5")) return "err";
+  return "info";
+}
+
+function renderRequests() {
+  if (!state.snapshot) return;
+  const http = state.snapshot.http || {};
+  const rows = http.recent || [];
+  const tbody = $("#request-rows");
+  if (!tbody) return;
+  const requestSearch = $("#request-search");
+  const search = (requestSearch ? requestSearch.value : "").trim().toLowerCase();
+  clear(tbody);
+  let shown = 0;
+  for (const item of rows) {
+    const haystack = [
+      item.time,
+      item.ip,
+      item.country,
+      item.city,
+      item.method,
+      item.path,
+      item.status,
+      item.frontend,
+      item.backend,
+      item.protocol,
+    ]
+      .join(" ")
+      .toLowerCase();
+    if (search && !haystack.includes(search)) continue;
+    shown += 1;
+    const location = [item.city, item.country].filter((part) => part && part !== "-").join(", ") || "Unknown";
+    const requestText = item.method === "-" ? item.path : `${item.method} ${item.path}`;
+    const requestCell = el("td", {
+      className: "wrap-cell",
+      text: requestText,
+      attrs: { title: requestText },
+    });
+    if (item.count > 1) {
+      requestCell.append(el("span", { className: "badge info", text: ` ×${fmt(item.count)}` }));
+    }
+    tbody.append(
+      el("tr", {
+        children: [
+          el("td", { className: "mono", text: item.time }),
+          el("td", {
+            className: "mono",
+            text: item.port && item.port !== "-" ? `${item.ip}:${item.port}` : item.ip,
+          }),
+          el("td", { text: location }),
+          el("td", { children: [el("span", { className: `badge ${statusBadgeClass(item.status)}`, text: item.status })] }),
+          requestCell,
+          el("td", { className: "number-cell", text: fmt(item.bytes * (item.count || 1)) }),
+          el("td", { text: item.frontend }),
+          el("td", { text: item.server && item.server !== "-" ? `${item.backend}/${item.server}` : item.backend }),
+          el("td", { text: item.protocol }),
+        ],
+      })
+    );
+  }
+  if (!shown) {
+    tbody.append(
+      el("tr", {
+        children: [
+          el("td", {
+            className: "muted",
+            attrs: { colspan: "9" },
+            text: search ? "No requests match the filter." : "No HTTP requests are available yet.",
+          }),
+        ],
+      })
+    );
+  }
+  const count = $("#request-count");
+  if (count) count.textContent = `${fmt(shown)} of ${fmt(rows.length)} rows`;
+  const pill = $("#requests-pill");
+  if (pill) pill.textContent = `${fmt(shown)} rows`;
+  const note = $("#requests-note");
+  if (note) {
+    note.textContent = `Newest first · up to ${fmt(http.recent_limit || rows.length)} rows · ${fmt(http.total || 0)} HTTP requests in the parsed window`;
+  }
+}
+
 function renderGoAccess() {
   if (!state.snapshot) return;
   const meta = state.snapshot.meta;
@@ -748,6 +837,7 @@ function renderAll() {
   renderVisitors();
   renderTls();
   renderHttp();
+  renderRequests();
   renderGoAccess();
   renderYouBanners();
   renderServerCard();
@@ -814,6 +904,10 @@ function setupFilters() {
       state.cityFilter = citySearch.value;
       renderCityTable();
     });
+  }
+  const requestSearch = $("#request-search");
+  if (requestSearch) {
+    requestSearch.addEventListener("input", () => renderRequests());
   }
 }
 

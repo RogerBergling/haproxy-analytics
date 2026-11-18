@@ -118,10 +118,12 @@ def build_goaccess_line(
         host = f"[{host}]"
     frontend = mask_text_ips(event.frontend, networks, mask_non_global, mask_full) or "-"
     backend = mask_text_ips(event.backend, networks, mask_non_global, mask_full) or "-"
+    server = mask_text_ips(event.server, networks, mask_non_global, mask_full) or "-"
     path = mask_text_ips(event.path, networks, mask_non_global, mask_full).replace('"', "%22")
     request = "-" if event.method == "-" else f"{event.method} {path} {event.protocol}"
+    port = event.client_port if event.client_port.isdigit() else "0"
     return (
-        f'{host}:0 [{event.timestamp}] {frontend} {backend}/- 0/0/0/0/0 '
+        f'{host}:{port} [{event.timestamp}] {frontend} {backend}/{server} 0/0/0/0/0 '
         f'{event.status} {event.bytes} - - ---- 0/0/0/0/0 0/0 "{request}"'
     )
 

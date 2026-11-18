@@ -308,6 +308,7 @@ class ServerTests(unittest.TestCase):
                 self.assertIn("text/html", headers["content-type"])
                 self.assertIn("sandbox allow-scripts", headers["content-security-policy"])
                 self.assertIn("frame-ancestors 'self'", headers["content-security-policy"])
+                self.assertIn("'unsafe-eval'", headers["content-security-policy"])
                 self.assertIn(b"fake goaccess", body)
 
     def test_post_is_rejected(self) -> None:

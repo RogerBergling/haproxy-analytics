@@ -72,6 +72,8 @@ class HttpEvent:
     path: str
     protocol: str
     count: int = 1
+    client_port: str = "-"
+    server: str = "-"
 
 
 @dataclass(frozen=True)
@@ -178,19 +180,22 @@ def _parse_event(message: str, count: int, syslog_time: str | None) -> ParsedEve
             continue
         method, path, protocol = _request_parts(match.group("rest"))
         bytes_text = match.group("bytes")
+        backend_name, _, server_name = match.group("backend").partition("/")
         return ParsedEvent(
             HttpEvent(
                 ip=_clean_ip(match.group("client")),
                 timestamp=match.group("timestamp"),
                 timestamp_display=_display_http_time(match.group("timestamp")),
                 frontend=_clean_name(match.group("frontend")),
-                backend=_clean_name(match.group("backend").split("/")[0]),
+                backend=_clean_name(backend_name),
                 status=match.group("status"),
                 bytes=int(bytes_text) if bytes_text.isdigit() else 0,
                 method=method,
                 path=path,
                 protocol=protocol,
                 count=count,
+                client_port=match.group("port"),
+                server=_clean_name(server_name) or "-",
             ),
             http_message=message,
         )

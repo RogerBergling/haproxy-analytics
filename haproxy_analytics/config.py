@@ -110,6 +110,7 @@ class Settings:
     refresh_seconds: int
     max_log_bytes: int
     max_visitor_rows: int
+    max_request_rows: int
     mask_internal_ips: bool
     mask_networks: tuple[IPNetwork, ...]
     mask_full: bool
@@ -196,6 +197,7 @@ class Settings:
             refresh_seconds=_env_int("REFRESH_SECONDS", 60, 1),
             max_log_bytes=_env_int("MAX_LOG_BYTES", 32 * 1024 * 1024, 1024),
             max_visitor_rows=_env_int("MAX_VISITOR_ROWS", 5000, 1),
+            max_request_rows=_env_int("MAX_REQUEST_ROWS", 2000, 1),
             mask_internal_ips=_env_bool("MASK_INTERNAL_IPS", True),
             mask_networks=_parse_networks("MASK_NETWORKS", _env_csv("MASK_NETWORKS")),
             mask_full=_env_bool("MASK_FULL", False),

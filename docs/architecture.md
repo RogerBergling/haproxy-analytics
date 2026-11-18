@@ -74,7 +74,8 @@ the error in `/healthz`.
   warnings.
 - `kpis`: HTTP requests, TLS connections, unique IPs, countries, 4xx/5xx,
   bandwidth, geolocated points, SNI hostnames and backends.
-- `http`: methods, statuses, backends, paths, countries and ASNs.
+- `http`: methods, statuses, backends, paths, countries, ASNs and the newest
+  individual requests, capped by `MAX_REQUEST_ROWS`.
 - `tls`: SNI hostnames, countries, ASNs and recent connections.
 - `geo`: countries, cities and map points with per-point IP lists for the
   self-highlight feature.

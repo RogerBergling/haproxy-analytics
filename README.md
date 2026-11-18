@@ -17,6 +17,7 @@ HAProxy Analytics is a small self-hosted service. It reads HAProxy logs from a m
 - **HTTP analytics** from HAProxy `option httplog` records: requests, bandwidth, methods, status codes, backends and requested paths.
 - **TLS/SNI analytics** from a TCP frontend that captures `req.ssl_sni`: hostnames, countries, ASNs and recent connections.
 - **Geo access** view: a world map plus searchable country and city tables, styled to match the other self-hosted apps in this workspace.
+- **Requests view**: the newest individual HTTP requests with time, client, country/city, status, request, bytes, frontend, backend and protocol, plus a text filter.
 - **Visitor table** grouped by observed client IP: SNI hostnames, HTTP backends, event counts and last-seen time.
 - **Internal IP masking** enabled by default: private, loopback and documentation addresses are masked in the dashboard and API; public addresses remain visible.
 - **"This is you"** highlight through the local `/api/whoami` endpoint. Forwarded addresses are trusted only from explicitly configured proxies; internal viewers see a masked notice instead of a highlight.
@@ -152,6 +153,7 @@ Copy [`.env.example`](.env.example) to `.env`. The most important settings:
 | `GEOIP_CITY_DB` / `GEOIP_ASN_DB` | `/geoip/...` | Database paths inside the container. |
 | `TRUSTED_PROXIES` | empty | Comma-separated proxy IPs/CIDRs allowed to supply `X-Forwarded-For`. |
 | `SYSLOG_LISTEN` | empty | Optional `host:port` syslog listener. Empty disables it. |
+| `MAX_REQUEST_ROWS` | `2000` | Newest individual HTTP requests retained for the Requests view and API. |
 | `SYSLOG_ALLOWED_NETWORKS` | `127.0.0.0/8,::1/128` | Source allowlist for the syslog receiver. |
 | `SYSLOG_TLS_CERT` / `SYSLOG_TLS_KEY` | empty | Optional TCP TLS certificate and key. |
 | `GOACCESS_ENABLED` | `false` | Generate the optional GoAccess report. |

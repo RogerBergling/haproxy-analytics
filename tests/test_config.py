@@ -44,6 +44,11 @@ class ConfigTests(unittest.TestCase):
             {"192.0.0.0/8", "172.0.0.0/8"},
         )
 
+    def test_max_request_rows(self) -> None:
+        with patch.dict(os.environ, {"MAX_REQUEST_ROWS": "25"}, clear=True):
+            settings = Settings.from_env()
+        self.assertEqual(settings.max_request_rows, 25)
+
     def test_goaccess_frontends(self) -> None:
         with patch.dict(
             os.environ,

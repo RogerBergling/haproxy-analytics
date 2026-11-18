@@ -76,6 +76,7 @@ uses the shell environment or CLI flags, not `.env` automatically.
 | `MAX_LOG_BYTES` | `33554432` | Read at most this many bytes from the end of the log. |
 | `REFRESH_SECONDS` | `60` | Snapshot rebuild interval. The browser also polls on this interval. |
 | `MAX_VISITOR_ROWS` | `5000` | Upper bound on returned visitor rows. |
+| `MAX_REQUEST_ROWS` | `2000` | Newest individual HTTP requests retained for the Requests view and API. |
 | `MASK_INTERNAL_IPS` | `true` | Mask non-global client IPs (private, loopback, documentation) in the dashboard and API. Public IPs remain visible. |
 | `MASK_NETWORKS` | empty | Additional CIDRs to mask even if public, for example `192.0.0.0/8,172.0.0.0/8`. |
 | `MASK_FULL` | `false` | Use one full mask (`x.x.x.x` / `x:x:x:x:x:x:x:x`) instead of prefix masks. |

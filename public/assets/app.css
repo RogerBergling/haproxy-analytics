@@ -350,6 +350,8 @@ h1, h2, h3, p { margin-top: 0; }
 .data-table .muted { color: var(--muted); }
 .table-scroll { max-height: 480px; overflow: auto; }
 .table-scroll .data-table th { top: 0; }
+.request-scroll { max-height: 70vh; }
+.request-table td.wrap-cell { max-width: 520px; }
 .share-cell { display: flex; align-items: center; gap: 8px; min-width: 120px; }
 .share-cell span { color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
 .share-track { width: 64px; flex: 0 0 64px; }

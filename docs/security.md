@@ -105,15 +105,18 @@ with a `sandbox` CSP in an iframe:
 sandbox allow-scripts;
 default-src 'none';
 style-src 'unsafe-inline';
-script-src 'unsafe-inline';
+script-src 'unsafe-inline' 'unsafe-eval';
 img-src data:;
 font-src data:;
 frame-ancestors 'self'
 ```
 
-It cannot read the parent page, navigate the top window or make network
-requests. Do not change the app to embed GoAccess HTML directly in the main
-document.
+The report needs `unsafe-eval` because GoAccess compiles its report templates
+with `new Function()`. This directive applies only to the sandboxed GoAccess
+response; the dashboard itself does not allow eval. The sandbox still prevents
+the report from reading or changing the parent page, and the CSP blocks all
+network requests (`default-src 'none'`). Do not change the app to embed
+GoAccess HTML directly in the main document.
 
 ### 6. Harden the container
 
@@ -206,6 +209,11 @@ GoAccess validates the client field as an IP address and rejects `x.x.x.x`.
 For the optional GoAccess report only, the masked client is therefore written
 as `0.0.0.0` (`::` for IPv6). The raw address is never passed to GoAccess, and
 all masked clients appear as that one placeholder visitor in its report.
+
+The native Requests view uses the same masking for client addresses, request
+paths, frontend names and backend names. It stores only the newest
+`MAX_REQUEST_ROWS` individual HTTP events in memory, and the snapshot API
+returns the same masked rows.
 
 When the viewer's own address is internal, the `THIS IS YOU` self-highlight is
 disabled. Highlighting a masked group would match several different clients.

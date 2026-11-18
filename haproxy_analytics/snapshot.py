@@ -218,6 +218,7 @@ class SnapshotService:
             aggregator = Aggregator(
                 geo,
                 self.settings.max_visitor_rows,
+                max_request_rows=self.settings.max_request_rows,
                 mask_internal_ips=self.settings.mask_internal_ips,
                 mask_networks=self.settings.mask_networks,
                 mask_full=self.settings.mask_full,

@@ -106,7 +106,7 @@ The test suite covers:
 - GoAccess disabled mode, missing binary, fake report generation, size limit,
   standard-format normalization, frontend filtering, GeoIP config paths and
   error details;
-- internal IP masking and masked visitor grouping;
+- internal IP masking, masked visitor grouping and capped individual request rows;
 - persistent syslog store append, rotation, clear and API token checks;
 - snapshot counts, warnings, source modes and failure fallback;
 - HTTP routes, security headers, method rejection, traversal rejection,

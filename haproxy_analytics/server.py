@@ -38,7 +38,9 @@ GOACCESS_CSP = (
     "sandbox allow-scripts; "
     "default-src 'none'; "
     "style-src 'unsafe-inline'; "
-    "script-src 'unsafe-inline'; "
+    # GoAccess compiles its report templates with new Function(), which needs
+    # unsafe-eval. This applies only to the sandboxed report response.
+    "script-src 'unsafe-inline' 'unsafe-eval'; "
     "img-src data:; "
     "font-src data:; "
     "frame-ancestors 'self'"

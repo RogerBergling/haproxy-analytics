@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict, deque
+from dataclasses import dataclass
 from typing import Any
 
 from .geoip import GeoResolver
@@ -12,6 +13,24 @@ from .privacy import IPNetwork, mask_ip, mask_text_ips
 _UNKNOWN_COUNTRIES = {"Unknown", "Private network", "-"}
 
 
+@dataclass(frozen=True)
+class RequestRow:
+    when: str
+    ip: str
+    method: str
+    path: str
+    status: str
+    size: int
+    frontend: str
+    backend: str
+    country: str
+    city: str
+    protocol: str
+    count: int
+    port: str
+    server: str
+
+
 class Aggregator:
     """Collect counters and per-client details without storing raw log lines."""
 
@@ -19,12 +38,14 @@ class Aggregator:
         self,
         geo: GeoResolver,
         max_visitor_rows: int = 5000,
+        max_request_rows: int = 2000,
         mask_internal_ips: bool = False,
         mask_networks: tuple[IPNetwork, ...] = (),
         mask_full: bool = False,
     ) -> None:
         self.geo = geo
         self.max_visitor_rows = max_visitor_rows
+        self.max_request_rows = max_request_rows
         self.mask_internal_ips = mask_internal_ips
         self.mask_networks = mask_networks
         self.mask_full = mask_full
@@ -64,6 +85,7 @@ class Aggregator:
             lambda: {"http": 0, "tls": 0, "ips": set()}
         )
         self.recent_tls: deque[tuple[str, str, str, str, str]] = deque(maxlen=25)
+        self.recent_http: deque[RequestRow] = deque(maxlen=max_request_rows)
 
     def record_unparsed(self) -> None:
         self.unparsed_lines += 1
@@ -167,10 +189,33 @@ class Aggregator:
             country, geo["country_code"], geo["city"], "http", count, event.ip, event.timestamp_display
         )
         self._record_point(geo, "http", count, event.ip)
+        self.recent_http.appendleft(
+            RequestRow(
+                when=event.timestamp_display,
+                ip=event.ip,
+                method=event.method,
+                path=event.path,
+                status=event.status,
+                size=event.bytes,
+                frontend=event.frontend,
+                backend=event.backend,
+                country=country,
+                city=geo["city"],
+                protocol=event.protocol,
+                count=count,
+                port=event.client_port,
+                server=event.server,
+            )
+        )
 
     @staticmethod
     def _items(counter: Counter[str], limit: int) -> list[dict[str, Any]]:
         return [{"name": name, "count": count} for name, count in counter.most_common(limit)]
+
+    def _mask_text(self, value: str) -> str:
+        if not self.masking_enabled:
+            return value
+        return mask_text_ips(value, self.mask_networks, self.mask_internal_ips, self.mask_full)
 
     def _mask_counter(self, counter: Counter[str]) -> Counter[str]:
         if not self.masking_enabled:
@@ -402,6 +447,30 @@ class Aggregator:
                 "paths": self._items(http_paths, 30),
                 "countries": self._items(self.http_countries, 15),
                 "asns": self._items(self.http_asns, 15),
+                "recent_limit": self.max_request_rows,
+                "recent": [
+                    {
+                        "time": row.when,
+                        "ip": mask_ip(
+                            row.ip, self.mask_networks, self.mask_internal_ips, self.mask_full
+                        )
+                        if self.masking_enabled
+                        else row.ip,
+                        "method": row.method,
+                        "path": self._mask_text(row.path),
+                        "status": row.status,
+                        "bytes": row.size,
+                        "frontend": self._mask_text(row.frontend),
+                        "backend": self._mask_text(row.backend),
+                        "country": row.country,
+                        "city": row.city,
+                        "protocol": row.protocol,
+                        "count": row.count,
+                        "port": row.port,
+                        "server": self._mask_text(row.server),
+                    }
+                    for row in self.recent_http
+                ],
             },
             "tls": {
                 "total": self.tls_total,
