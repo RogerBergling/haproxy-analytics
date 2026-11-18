@@ -15,6 +15,7 @@ from haproxy_analytics.logsource import (
     SyslogServer,
     read_log_tail,
 )
+from haproxy_analytics.syslog_store import SyslogStore
 
 
 def wait_for(predicate, timeout: float = 3.0) -> bool:
@@ -167,6 +168,35 @@ class LogSourceTests(unittest.TestCase):
                 self.assertIn("tls.example.com", buffer.snapshot()[0])
             finally:
                 server.stop()
+
+
+    def test_udp_receiver_persists_to_store(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            store = SyslogStore(Path(temp) / "syslog.log", max_bytes=1024 * 1024, backups=1)
+            buffer = SyslogBuffer(100)
+            server = SyslogServer(
+                host="127.0.0.1",
+                port=0,
+                protocols=("udp",),
+                allowed=(ipaddress.ip_network("127.0.0.0/8"),),
+                buffer=buffer,
+                max_message_bytes=65536,
+                store=store,
+            )
+            server.start()
+            try:
+                port = server.bound[0]["port"]
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
+                    client.sendto(
+                        b"Nov 18 00:00:00 demo haproxy[1]: src=203.0.113.1 "
+                        b"dst=198.51.100.1:443 sni=stored.example.com",
+                        ("127.0.0.1", port),
+                    )
+                self.assertTrue(wait_for(lambda: store.info()["total_bytes"] > 0))
+                self.assertIn("stored.example.com", " ".join(store.read_lines(1024)))
+            finally:
+                server.stop()
+                store.close()
 
     def test_oversized_udp_message_is_dropped(self) -> None:
         buffer = SyslogBuffer(100)

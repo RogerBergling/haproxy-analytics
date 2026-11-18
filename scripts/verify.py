@@ -30,6 +30,7 @@ REQUIRED = [
     "haproxy_analytics/server.py",
     "haproxy_analytics/parser.py",
     "haproxy_analytics/snapshot.py",
+    "haproxy_analytics/syslog_store.py",
     "public/index.html",
     "public/assets/app.css",
     "public/assets/app.js",

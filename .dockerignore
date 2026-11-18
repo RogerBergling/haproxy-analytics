@@ -18,6 +18,7 @@ scripts
 logs
 geoip
 certs
+data
 *.mmdb
 *.log
 !examples/demo-haproxy.log

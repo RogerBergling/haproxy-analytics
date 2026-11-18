@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import IPNetwork
+from .syslog_store import SyslogStore
 
 LOGGER = logging.getLogger(__name__)
 
@@ -106,6 +107,10 @@ class SyslogBuffer:
         with self._lock:
             self.dropped += 1
 
+    def clear(self) -> None:
+        with self._lock:
+            self._lines.clear()
+
     def snapshot(self) -> list[str]:
         with self._lock:
             return list(self._lines)
@@ -126,6 +131,7 @@ class _SyslogState:
     buffer: SyslogBuffer
     allowed: tuple[IPNetwork, ...]
     max_message_bytes: int
+    store: SyslogStore | None = None
     received: int = 0
 
     def is_allowed(self, source: str) -> bool:
@@ -145,7 +151,12 @@ class _SyslogState:
             return
         text = data.decode("utf-8", errors="replace")
         for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
             self.buffer.append(line)
+            if self.store is not None:
+                self.store.append(line)
 
     def receive_line(self, data: bytes, source: str) -> None:
         if not self.is_allowed(source):
@@ -154,7 +165,12 @@ class _SyslogState:
         if len(data) > self.max_message_bytes:
             self.buffer.drop()
             return
-        self.buffer.append(data.decode("utf-8", errors="replace"))
+        line = data.decode("utf-8", errors="replace").strip()
+        if not line:
+            return
+        self.buffer.append(line)
+        if self.store is not None:
+            self.store.append(line)
 
 
 class _UDPHandler(socketserver.BaseRequestHandler):
@@ -217,6 +233,7 @@ class SyslogServer:
     allowed: tuple[IPNetwork, ...]
     buffer: SyslogBuffer
     max_message_bytes: int
+    store: SyslogStore | None = None
     tls_cert: Path | None = None
     tls_key: Path | None = None
     tls_ca: Path | None = None
@@ -242,6 +259,7 @@ class SyslogServer:
             buffer=self.buffer,
             allowed=self.allowed,
             max_message_bytes=self.max_message_bytes,
+            store=self.store,
         )
         family = socket.AF_INET6 if ":" in self.host else socket.AF_INET
 
@@ -294,6 +312,8 @@ class SyslogServer:
             thread.join(timeout=2)
         self._servers.clear()
         self._threads.clear()
+        if self.store is not None:
+            self.store.close()
 
     def info(self) -> dict[str, Any]:
         payload = {
@@ -305,4 +325,11 @@ class SyslogServer:
             "bound": list(self.bound),
         }
         payload.update(self.buffer.info())
+        payload["store"] = self.store.info() if self.store is not None else {"enabled": False}
         return payload
+
+    def clear(self) -> dict[str, Any]:
+        self.buffer.clear()
+        if self.store is not None:
+            self.store.clear()
+        return self.info()

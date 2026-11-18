@@ -7,13 +7,14 @@ a static browser dashboard, not a log platform.
 
 | Component | File | Responsibility |
 | --- | --- | --- |
-| HTTP server | `haproxy_analytics/server.py` | Serves the dashboard, JSON API, health/version endpoints and the optional GoAccess report. Applies security headers and method restrictions. |
+| HTTP server | `haproxy_analytics/server.py` | Serves the dashboard, JSON API, health/version endpoints, the optional GoAccess report and the token-protected syslog clear endpoint. Applies security headers and method restrictions. |
 | Snapshot service | `haproxy_analytics/snapshot.py` | Reads sources, runs the parser and aggregator, holds the latest snapshot and the optional GoAccess HTML in memory. |
 | Parser | `haproxy_analytics/parser.py` | Recognises syslog prefixes, HTTP `option httplog` records, SNI records and `message repeated` groups. |
 | Aggregator | `haproxy_analytics/aggregate.py` | Produces counters, per-IP details, country/city statistics and map points. |
 | GeoIP resolver | `haproxy_analytics/geoip.py` | Optional MaxMind City/ASN lookups from local MMDB files. Never performs network lookups. |
 | GoAccess runner | `haproxy_analytics/goaccess.py` | Optional subprocess with a timeout and output-size cap. |
 | Log sources | `haproxy_analytics/logsource.py` | Read-only file tail reader, bounded syslog ring buffer and optional UDP/TCP receiver. |
+| Syslog store | `haproxy_analytics/syslog_store.py` | Optional append-only persistent syslog history with size rotation and a clear operation. |
 | Configuration | `haproxy_analytics/config.py` | Parses environment and CLI values with safe defaults. |
 | Frontend | `public/` | Static HTML, CSS and ES modules. No build step, framework or CDN. |
 
@@ -57,7 +58,9 @@ the error in `/healthz`.
   read-only. Rotated or compressed files are not followed automatically.
 - **Syslog**: opt-in. UDP and/or TCP, a source-network allowlist, a bounded
   in-memory ring, a maximum message size and optional TCP TLS with optional
-  client certificates. No persistence; a restart clears the ring.
+  client certificates. By default a restart clears the ring. Set
+  `SYSLOG_STORE_FILE=/data/syslog.log` to persist accepted lines in the
+  dedicated `/data` volume, with size rotation and a clear-history action.
 - **Both**: both sources are parsed. If the same events exist in both, they are
   counted twice, so the snapshot includes a warning.
 - **Demo**: reads the bundled synthetic log. It does not touch HAProxy.
@@ -67,7 +70,8 @@ the error in `/healthz`.
 `GET /api/snapshot` returns a JSON object with:
 
 - `meta`: generation time, refresh interval, version, active sources, GeoIP
-  availability, GoAccess status, parser statistics and warnings.
+  availability, syslog store status, GoAccess status, parser statistics and
+  warnings.
 - `kpis`: HTTP requests, TLS connections, unique IPs, countries, 4xx/5xx,
   bandwidth, geolocated points, SNI hostnames and backends.
 - `http`: methods, statuses, backends, paths, countries and ASNs.
@@ -113,13 +117,13 @@ It is not a public API.
 
 ## Deliberate omissions
 
-- No database or persistent event store.
+- No database or queryable event store. The optional syslog file store is append-only.
 - No user accounts, sessions, password hashes or MFA.
 - No external IP geolocation or map tile service.
 - No log upload endpoint.
 - No background job queue.
-- No automatic log rotation or compression handling.
-- No long-term history across restarts when using syslog only.
+- No automatic rotation or compression for the mounted file source. The optional syslog store rotates by size.
+- No long-term history unless the optional syslog store is enabled or the log is kept externally.
 
 These are scope decisions, not hidden limitations. The documentation explains
 the deployment patterns that provide persistence and history outside the app.

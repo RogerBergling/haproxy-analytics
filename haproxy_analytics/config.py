@@ -123,6 +123,9 @@ class Settings:
     syslog_allowed_networks: tuple[IPNetwork, ...]
     syslog_buffer_lines: int
     syslog_max_message_bytes: int
+    syslog_store_file: Path | None
+    syslog_store_max_bytes: int
+    syslog_store_backups: int
     syslog_tls_cert: Path | None
     syslog_tls_key: Path | None
     syslog_tls_ca: Path | None
@@ -205,6 +208,15 @@ class Settings:
             syslog_allowed_networks=allowed,
             syslog_buffer_lines=_env_int("SYSLOG_BUFFER_LINES", 200000, 1),
             syslog_max_message_bytes=_env_int("SYSLOG_MAX_MESSAGE_BYTES", 65536, 256),
+            syslog_store_file=(
+                _resolve_path(_env("SYSLOG_STORE_FILE"), Path("/data/syslog.log"))
+                if _env("SYSLOG_STORE_FILE")
+                else None
+            ),
+            syslog_store_max_bytes=_env_int(
+                "SYSLOG_STORE_MAX_BYTES", 512 * 1024 * 1024, 1024 * 1024
+            ),
+            syslog_store_backups=_env_int("SYSLOG_STORE_BACKUPS", 1, 0),
             syslog_tls_cert=tls_cert,
             syslog_tls_key=tls_key,
             syslog_tls_ca=tls_ca,

@@ -10,11 +10,12 @@ setup. All addresses are documentation placeholders.
 | --- | --- | --- | --- |
 | Read a local file on the HAProxy host | Same-host deployment | The log file | Read-only mount; protect the file permissions. |
 | Central rsyslog over TLS → file → app | Separate host, normal operations | The central log file | Recommended. TLS + certificate validation + local file retention. |
-| Built-in syslog receiver | Separate host, quick setup, low volume | No; in-memory ring only | Disabled by default. Source allowlist and optional TCP TLS/mTLS. |
+| Built-in syslog receiver | Separate host, quick setup, low volume | Optional persistent file via `SYSLOG_STORE_FILE`; otherwise memory-only | Disabled by default. Source allowlist and optional TCP TLS/mTLS. |
 | Pull or copy logs with a script | Batch or offline analysis | Depends on the script | More credentials and scheduling; not built in. |
 
-The built-in receiver is not a replacement for a durable log store. If you need
-history across restarts, keep a file or a central syslog server.
+By default the built-in receiver is not a durable log store. Set
+`SYSLOG_STORE_FILE=/data/syslog.log` to persist received lines in the dedicated
+`/data` volume, or keep a central syslog file.
 
 ## Pattern 1: same host, mounted file
 
@@ -232,10 +233,14 @@ does not already contain the same forwarded records.
   generated-at timestamp.
 - The file source reads the tail window on every refresh. Rotated files are not
   followed; the new current file is read on the next refresh.
-- The syslog receiver is in-memory only. A restart loses its ring buffer.
-- For durable history, keep the central rsyslog file, use your existing log
-  store, or add a larger `MAX_LOG_BYTES` and a rotation scheme that the app can
-  read.
+- By default the syslog receiver is in-memory only. A restart loses its ring
+  buffer. Set `SYSLOG_STORE_FILE=/data/syslog.log` to persist it.
+- The persistent syslog store rotates by size
+  (`SYSLOG_STORE_MAX_BYTES`, `SYSLOG_STORE_BACKUPS`) and can be cleared from the
+  dashboard's Security & privacy tab.
+- For a larger dashboard window, increase `MAX_LOG_BYTES` and
+  `REFRESH_SECONDS` together. The on-disk store can be larger than the parsed
+  window.
 - Compressed files are not read. Decompress them before mounting if they are
   part of the analysis window.
 

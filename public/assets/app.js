@@ -121,6 +121,7 @@ function showAlert(message, kind = "error") {
   if (!alert) return;
   alert.textContent = message;
   alert.classList.toggle("warn", kind === "warn");
+  alert.classList.toggle("ok", kind === "ok");
   alert.classList.remove("hidden");
 }
 
@@ -666,6 +667,63 @@ function renderWarnings() {
   showAlert(`${shown}${suffix}`, "warn");
 }
 
+function renderSyslogStore() {
+  const status = $("#syslog-store-status");
+  const button = $("#clear-syslog-button");
+  if (!status || !button) return;
+  const snapshot = state.snapshot;
+  const meta = snapshot && snapshot.meta ? snapshot.meta : {};
+  const source = meta.source || {};
+  const syslog = source.syslog || {};
+  const store = syslog.store || {};
+  if (!store.enabled) {
+    status.textContent = "No persistent syslog store configured. Set SYSLOG_STORE_FILE and mount the data directory.";
+    button.disabled = true;
+    return;
+  }
+  const files = Array.isArray(store.files) ? store.files.length : 0;
+  status.textContent = `${store.path} · ${formatBytes(store.total_bytes)} · ${fmt(files)} file(s) · ${fmt(store.write_errors)} write error(s)`;
+  button.disabled = false;
+}
+
+function setupClearSyslog() {
+  const button = $("#clear-syslog-button");
+  if (!button) return;
+  button.addEventListener("click", async () => {
+    if (!window.confirm("Delete the persisted syslog history and all backups? This cannot be undone.")) {
+      return;
+    }
+    button.disabled = true;
+    button.textContent = "Clearing…";
+    const resultNode = $("#clear-syslog-result");
+    if (resultNode) resultNode.textContent = "";
+    try {
+      const token = await fetchJSON("/api/clear-token");
+      const response = await fetch("/api/syslog/clear", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "X-CSRF-Token": token.token,
+        },
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.cleared) {
+        throw new Error(result.error || `HTTP ${response.status}`);
+      }
+      await refreshSnapshot(true);
+      if (resultNode) resultNode.textContent = "Persisted syslog history cleared.";
+      showAlert("Persisted syslog history cleared.", "ok");
+    } catch (error) {
+      if (resultNode) resultNode.textContent = `Could not clear history: ${error.message}`;
+      showAlert(`Could not clear syslog history: ${error.message}`);
+    } finally {
+      button.textContent = "Clear syslog history";
+      button.disabled = false;
+    }
+  });
+}
+
 function renderAll() {
   if (!state.snapshot) return;
   renderStats();
@@ -677,6 +735,7 @@ function renderAll() {
   renderYouBanners();
   renderServerCard();
   renderWarnings();
+  renderSyslogStore();
 }
 
 function showView(name) {
@@ -887,4 +946,5 @@ setupNavigation();
 setupFilters();
 setupFindMe();
 setupRefresh();
+setupClearSyslog();
 initialLoad();

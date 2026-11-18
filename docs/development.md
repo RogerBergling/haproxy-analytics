@@ -14,6 +14,7 @@ haproxy_analytics/
 ├── parser.py            HTTP, SNI and repeated-message parser
 ├── server.py            HTTP routes, security headers, whoami
 ├── snapshot.py          refresh loop and snapshot assembly
+├── syslog_store.py      optional persistent syslog history and rotation
 └── version.py           build metadata
 
 public/
@@ -104,6 +105,7 @@ The test suite covers:
 - UDP/TCP receiver allowlists, size limits and TCP TLS;
 - GoAccess disabled mode, missing binary, fake report generation and size limit;
 - internal IP masking and masked visitor grouping;
+- persistent syslog store append, rotation, clear and API token checks;
 - snapshot counts, warnings, source modes and failure fallback;
 - HTTP routes, security headers, method rejection, traversal rejection,
   `/api/whoami` trust behavior, HEAD and version/health endpoints.

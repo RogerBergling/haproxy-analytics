@@ -38,7 +38,7 @@ history as sensitive data.
 
 ## Security properties
 
-- No upload endpoint, database, account system or persistent write path.
+- No upload endpoint, database or account system. The optional persistent syslog store writes only to a dedicated data volume.
 - No CDNs, external fonts, analytics, telemetry, map tiles or third-party
   requests from the browser.
 - Strict Content Security Policy, `frame-ancestors 'none'`, `nosniff`,

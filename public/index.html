@@ -340,7 +340,7 @@
       <div class="security-grid">
         <section class="security-item">
           <h3>Read-only by design</h3>
-          <p>The container reads a mounted HAProxy log or accepts syslog. It has no upload endpoint, no database, no write path and no account system. The only state is the in-memory snapshot and the optional syslog ring buffer.</p>
+          <p>The container reads a mounted HAProxy log or accepts syslog. It has no upload endpoint, database or account system. The optional persistent syslog history writes only to the dedicated data volume; everything else stays in memory.</p>
         </section>
         <section class="security-item">
           <h3>No third-party requests</h3>
@@ -371,6 +371,17 @@
           <p>The optional GoAccess report is served in a sandboxed iframe with a separate CSP. It cannot read the parent page, navigate the top window or make network requests. The built-in analytics do not require GoAccess.</p>
         </section>
       </div>
+
+      <section class="card danger-zone">
+        <div class="card-head">
+          <div><div class="card-title">Persisted syslog history</div><div class="card-sub" id="syslog-store-status">Checking…</div></div>
+        </div>
+        <div class="card-body">
+          <p class="card-sub">Clearing removes the persisted syslog file and its backups. The in-memory buffer is cleared too. This cannot be undone.</p>
+          <button class="btn danger" id="clear-syslog-button" type="button" disabled>Clear syslog history</button>
+          <p class="card-sub" id="clear-syslog-result" aria-live="polite"></p>
+        </div>
+      </section>
     </section>
 
     <footer class="footer">

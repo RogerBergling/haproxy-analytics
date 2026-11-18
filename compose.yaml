@@ -40,6 +40,9 @@ services:
       SYSLOG_ALLOWED_NETWORKS: ${SYSLOG_ALLOWED_NETWORKS:-127.0.0.0/8,::1/128}
       SYSLOG_BUFFER_LINES: ${SYSLOG_BUFFER_LINES:-200000}
       SYSLOG_MAX_MESSAGE_BYTES: ${SYSLOG_MAX_MESSAGE_BYTES:-65536}
+      SYSLOG_STORE_FILE: ${SYSLOG_STORE_FILE:-}
+      SYSLOG_STORE_MAX_BYTES: ${SYSLOG_STORE_MAX_BYTES:-536870912}
+      SYSLOG_STORE_BACKUPS: ${SYSLOG_STORE_BACKUPS:-1}
       SYSLOG_TLS_CERT: ${SYSLOG_TLS_CERT:-}
       SYSLOG_TLS_KEY: ${SYSLOG_TLS_KEY:-}
       SYSLOG_TLS_CA: ${SYSLOG_TLS_CA:-}
@@ -54,6 +57,7 @@ services:
     volumes:
       - "${HAPROXY_LOG_DIR:-./logs}:/logs:ro"
       - "${GEOIP_DIR:-./geoip}:/geoip:ro"
+      - "${DATA_DIR:-./data}:/data:rw"
       # - "${SYSLOG_CERT_DIR:-./certs}:/certs:ro"
     read_only: true
     tmpfs:

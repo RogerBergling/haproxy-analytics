@@ -205,6 +205,14 @@ h1, h2, h3, p { margin-top: 0; }
   box-shadow: 0 8px 24px rgba(20, 184, 166, .18);
 }
 .btn.primary:hover { background: linear-gradient(180deg, #5eead4, #2dd4bf); }
+.btn.danger {
+  border-color: rgba(242, 109, 109, .4);
+  color: var(--red);
+  background: var(--red-bg);
+}
+.btn.danger:hover { border-color: var(--red); background: rgba(242, 109, 109, .2); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.danger-zone { border-color: rgba(242, 109, 109, .28); }
 .btn-icon { width: 32px; padding: 0; justify-content: center; }
 .btn-icon svg { width: 16px; height: 16px; }
 .link-button {
@@ -235,6 +243,11 @@ h1, h2, h3, p { margin-top: 0; }
   border-color: rgba(244, 183, 64, .3);
   background: var(--amber-bg);
   color: var(--amber);
+}
+.alert.ok {
+  border-color: rgba(53, 208, 127, .3);
+  background: var(--green-bg);
+  color: var(--green);
 }
 :root[data-theme="light"] .alert { color: #9f1239; }
 :root[data-theme="light"] .alert.warn { color: #92400e; }

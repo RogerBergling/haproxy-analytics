@@ -20,6 +20,7 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(settings.mask_internal_ips)
         self.assertEqual(settings.mask_networks, ())
         self.assertFalse(settings.mask_full)
+        self.assertIsNone(settings.syslog_store_file)
 
     def test_empty_log_file_disables_file_source(self) -> None:
         with patch.dict(os.environ, {"HAPROXY_LOG_FILE": ""}, clear=True):
@@ -42,6 +43,21 @@ class ConfigTests(unittest.TestCase):
             {str(network) for network in settings.mask_networks},
             {"192.0.0.0/8", "172.0.0.0/8"},
         )
+
+    def test_syslog_store(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "SYSLOG_STORE_FILE": "/data/syslog.log",
+                "SYSLOG_STORE_MAX_BYTES": "1048576",
+                "SYSLOG_STORE_BACKUPS": "2",
+            },
+            clear=True,
+        ):
+            settings = Settings.from_env()
+        self.assertEqual(str(settings.syslog_store_file), "/data/syslog.log")
+        self.assertEqual(settings.syslog_store_max_bytes, 1048576)
+        self.assertEqual(settings.syslog_store_backups, 2)
 
     def test_mask_full(self) -> None:
         with patch.dict(os.environ, {"MASK_FULL": "true"}, clear=True):

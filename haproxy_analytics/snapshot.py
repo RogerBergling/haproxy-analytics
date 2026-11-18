@@ -78,6 +78,7 @@ class SnapshotService:
         self.settings = settings
         self.syslog = syslog
         self._lock = threading.Lock()
+        self._refresh_lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._snapshot: dict[str, Any] | None = None
@@ -104,6 +105,10 @@ class SnapshotService:
             self._thread = None
 
     def refresh_once(self) -> None:
+        with self._refresh_lock:
+            self._refresh_once_locked()
+
+    def _refresh_once_locked(self) -> None:
         started = time.monotonic()
         warnings: list[str] = []
         sources: list[str] = []
@@ -156,13 +161,28 @@ class SnapshotService:
                             "were read. Increase MAX_LOG_BYTES for a wider window."
                         )
                 if self.syslog is not None:
-                    syslog_lines = self.syslog.buffer.snapshot()
+                    syslog_lines: list[str] = []
+                    store = self.syslog.store
+                    if store is not None:
+                        syslog_lines = store.read_lines(self.settings.max_log_bytes)
+                    if not syslog_lines:
+                        syslog_lines = self.syslog.buffer.snapshot()
                     if syslog_lines:
                         lines.extend(syslog_lines)
                         sources.append("syslog")
-                    if syslog_info.get("buffered", 0) == 0:
+                    if store is not None and store.write_errors:
                         warnings.append(
-                            "The syslog receiver is enabled but its in-memory buffer is empty."
+                            f"{store.write_errors} syslog lines could not be written to "
+                            f"{store.path}. Check the data directory permissions and disk space."
+                        )
+                    store_info = syslog_info.get("store") or {}
+                    store_has_history = bool(
+                        store_info.get("enabled") and store_info.get("total_bytes", 0)
+                    )
+                    if syslog_info.get("buffered", 0) == 0 and not store_has_history:
+                        warnings.append(
+                            "The syslog receiver is enabled but its in-memory buffer and "
+                            "persistent store are empty."
                         )
                     if syslog_info.get("rejected", 0):
                         warnings.append(
@@ -185,7 +205,7 @@ class SnapshotService:
                     "Both file and syslog sources are active. If the same events are present in "
                     "both, they are counted twice."
                 )
-            if not sources:
+            if not sources and self.syslog is None:
                 warnings.append(
                     "No events are available. Configure HAPROXY_LOG_FILE or SYSLOG_LISTEN, "
                     "or start with DEMO_MODE=true to explore the interface."
@@ -294,6 +314,13 @@ class SnapshotService:
                 if self._snapshot is None:
                     self._snapshot = _empty_payload(f"Snapshot refresh failed: {exc}")
                     self._goaccess_html = None
+
+    def clear_syslog_history(self) -> dict[str, Any]:
+        if self.syslog is None or self.syslog.store is None:
+            return {"cleared": False, "error": "No persistent syslog store is configured."}
+        self.syslog.clear()
+        self.refresh_once()
+        return {"cleared": True, "store": self.syslog.store.info()}
 
     def _syslog_is_loopback_only(self) -> bool:
         if self.syslog is None:

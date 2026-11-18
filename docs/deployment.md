@@ -28,10 +28,11 @@ haproxy-analytics/
 ├── geoip/
 │   ├── GeoLite2-City.mmdb
 │   └── GeoLite2-ASN.mmdb
+├── data/                 # optional persistent syslog history, writable
 └── certs/                # optional syslog TLS material, ignored by git
 ```
 
-`logs/`, `geoip/`, `certs/` and `.env` are in `.gitignore`.
+`logs/`, `geoip/`, `data/`, `certs/` and `.env` are in `.gitignore`.
 
 ## Start
 
@@ -39,7 +40,8 @@ haproxy-analytics/
 git clone https://github.com/RogerBergling/haproxy-analytics.git
 cd haproxy-analytics
 cp .env.example .env
-mkdir -p logs geoip
+mkdir -p logs geoip data
+sudo chown 10001:10001 data
 
 # For a first test, copy the current HAProxy log. The app reads the file; it
 # never writes it. For a live same-host deployment, set
@@ -86,6 +88,10 @@ uses the shell environment or CLI flags, not `.env` automatically.
 | `SYSLOG_ALLOWED_NETWORKS` | `127.0.0.0/8,::1/128` | Source allowlist. Set the sending host or relay network. |
 | `SYSLOG_BUFFER_LINES` | `200000` | In-memory ring size. |
 | `SYSLOG_MAX_MESSAGE_BYTES` | `65536` | Oversized messages are dropped. |
+| `DATA_DIR` | `./data` | Host directory for optional persistent syslog history, mounted read-write at `/data`. |
+| `SYSLOG_STORE_FILE` | empty | Set to `/data/syslog.log` to persist received syslog lines. Empty keeps the receiver memory-only. |
+| `SYSLOG_STORE_MAX_BYTES` | `536870912` | Maximum size of the current syslog file before rotation. |
+| `SYSLOG_STORE_BACKUPS` | `1` | Number of rotated files kept. |
 | `SYSLOG_TLS_CERT` | empty | Container path to a PEM certificate chain for TCP syslog. |
 | `SYSLOG_TLS_KEY` | empty | Container path to the private key. |
 | `SYSLOG_TLS_CA` | empty | Optional CA bundle for verifying client certificates. |
@@ -184,6 +190,52 @@ SYSLOG_TLS_REQUIRE_CLIENT_CERT=true
 
 Uncomment the certs volume in `compose.yaml`. Plain UDP/TCP syslog has no
 authentication; use a private network, firewall rules or TLS.
+
+### Persistent syslog history
+
+The syslog receiver is memory-only unless `SYSLOG_STORE_FILE` is set. To keep
+received lines across restarts and reboots:
+
+1. Create the data directory and give it to the container user:
+
+   ```bash
+   mkdir -p data
+   sudo chown 10001:10001 data
+   ```
+
+2. Set these values in `.env`:
+
+   ```dotenv
+   DATA_DIR=./data
+   SYSLOG_STORE_FILE=/data/syslog.log
+   SYSLOG_STORE_MAX_BYTES=536870912
+   SYSLOG_STORE_BACKUPS=1
+   ```
+
+3. Recreate the container:
+
+   ```bash
+   docker compose up -d --force-recreate
+   ```
+
+The Compose file mounts `DATA_DIR` at `/data` read-write. The app appends
+accepted syslog lines there and reads the newest tail on every refresh. The
+on-disk history survives reboot; the dashboard window is still bounded by
+`MAX_LOG_BYTES`.
+
+When the current file reaches `SYSLOG_STORE_MAX_BYTES`, it is rotated to
+`syslog.log.1`; `SYSLOG_STORE_BACKUPS` controls how many rotated files remain.
+Disk use is bounded by roughly `(backups + 1) × max bytes`.
+
+The **Security & privacy** tab contains a **Clear syslog history** action. It
+removes the current file and all backups and clears the in-memory buffer. The
+action is CSRF-protected with a per-process token and should only be available
+behind the authenticated HAProxy frontend.
+
+If the data directory is not writable, the app keeps running and reports write
+errors in the snapshot. The receiver still accepts lines into memory, but new
+lines may not appear until the store is writable again.
+
 
 ## Put HAProxy in front
 

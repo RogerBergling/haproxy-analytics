@@ -183,19 +183,54 @@ unique-IP or unique-path set still costs memory. Monitor the container and raise
 
 ## Storage and disk usage
 
-The syslog receiver is **memory-only**:
+### Syslog receiver without a persistent store
+
+By default the syslog receiver is **memory-only**:
 
 - Accepted messages are stored in a bounded in-memory ring,
   `SYSLOG_BUFFER_LINES` (default 200,000).
-- Nothing is written to disk for syslog mode.
+- Nothing is written to disk in this mode.
 - A restart clears the ring.
 - When the ring is full, the oldest lines are dropped. The app keeps running,
   increments the `dropped` counter and shows a snapshot warning.
 - Messages larger than `SYSLOG_MAX_MESSAGE_BYTES` are dropped and counted.
-- Large rings consume RAM, not disk. 200,000 full-size 64 KB messages would be
-  enormous; real HAProxy lines are much smaller, but the limit still matters.
+- Large rings consume RAM, not disk.
 
-Other storage paths:
+### Persistent syslog history
+
+Set `SYSLOG_STORE_FILE=/data/syslog.log` to persist accepted syslog lines in the
+host directory mounted at `/data` (`DATA_DIR`, default `./data`):
+
+```dotenv
+DATA_DIR=./data
+SYSLOG_STORE_FILE=/data/syslog.log
+SYSLOG_STORE_MAX_BYTES=536870912
+SYSLOG_STORE_BACKUPS=1
+```
+
+The history survives restarts and reboots. Disk use is bounded by roughly
+`(SYSLOG_STORE_BACKUPS + 1) × SYSLOG_STORE_MAX_BYTES`; with the defaults that is
+about 1 GB.
+
+The dashboard still reads only the newest `MAX_LOG_BYTES` tail. Increase
+`MAX_LOG_BYTES` and `REFRESH_SECONDS` together if you want a larger analysis
+window and can accept the extra parsing cost.
+
+When the current file reaches `SYSLOG_STORE_MAX_BYTES`, it is rotated to
+`syslog.log.1`; older backups are shifted or removed according to
+`SYSLOG_STORE_BACKUPS`.
+
+The **Security & privacy** tab has a **Clear syslog history** action. It removes
+the current file and all backups, clears the in-memory buffer, and rebuilds the
+snapshot. The action is CSRF-protected with a per-process token and should only
+be reachable behind the authenticated HAProxy frontend.
+
+If the data directory is not writable, the app keeps running and shows write
+errors in the snapshot. The receiver continues to accept lines into its
+in-memory ring, but new lines may not appear in the dashboard until the store is
+writable again.
+
+### Other storage paths
 
 - **File mode** only reads the mounted log. It never writes to it.
 - **Snapshot data** is in memory.
@@ -207,12 +242,15 @@ Other storage paths:
 - **GeoIP databases** live in the host `./geoip` directory and are typically
   tens of MB. The optional updater writes them there.
 
-If the host disk is full:
+### If the host disk is full
 
-- The app's own syslog/snapshot path does not require disk space.
+- The memory-only path does not require disk space.
+- The persistent syslog store reports write errors and stops persisting new
+  lines until space is available.
 - Docker may fail to write container logs, create temporary files or restart
   the container.
 - GoAccess report generation fails, but the core dashboard can continue.
+- The **Clear syslog history** action can free the persistent store's disk space.
 - A container restart can fail until Docker has writable disk space again.
 
 If host memory is exhausted, the kernel can OOM-kill the container. That loses
@@ -223,14 +261,11 @@ Monitor:
 ```bash
 df -h
 docker system df
-du -sh geoip/
+du -sh geoip/ data/
 docker stats haproxy-analytics
 curl -s http://127.0.0.1:8009/api/snapshot \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["meta"]["source"]["syslog"]); print(d["meta"]["warnings"])'
 ```
-
-For durable history, keep a central rsyslog file or run the app in file mode.
-The built-in syslog receiver is a live buffer, not a log store.
 
 ## Health, version and logs
 

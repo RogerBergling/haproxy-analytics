@@ -6,6 +6,7 @@ import ipaddress
 import json
 import logging
 import mimetypes
+import secrets
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -257,6 +258,23 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
     def _serve_version(self, *, head_only: bool = False) -> None:
         self._send_json(version_info(), head_only=head_only)
 
+    def _serve_clear_token(self, *, head_only: bool = False) -> None:
+        self._send_json({"token": self.server.clear_token}, head_only=head_only)
+
+    def _serve_clear_syslog(self) -> None:
+        self.close_connection = True
+        supplied = self.headers.get("X-CSRF-Token", "")
+        expected = self.server.clear_token
+        if not supplied or not secrets.compare_digest(supplied, expected):
+            self._send_json(
+                {"cleared": False, "error": "Invalid or missing clear token."},
+                HTTPStatus.FORBIDDEN,
+            )
+            return
+        result = self.service.clear_syslog_history()
+        status = HTTPStatus.OK if result.get("cleared") else HTTPStatus.CONFLICT
+        self._send_json(result, status)
+
     def _serve_goaccess(self, *, head_only: bool = False) -> None:
         html = self.service.goaccess_html()
         if not html:
@@ -287,6 +305,8 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
             self._serve_health()
         elif path == "/version.json":
             self._serve_version()
+        elif path == "/api/clear-token":
+            self._serve_clear_token()
         elif path == "/goaccess":
             self._serve_goaccess()
         elif path.startswith("/assets/") or path in {f"/{name}" for name in STATIC_ROOT_FILES}:
@@ -306,6 +326,8 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
             self._serve_health(head_only=True)
         elif path == "/version.json":
             self._serve_version(head_only=True)
+        elif path == "/api/clear-token":
+            self._serve_clear_token(head_only=True)
         elif path == "/goaccess":
             self._serve_goaccess(head_only=True)
         elif path.startswith("/assets/") or path in {f"/{name}" for name in STATIC_ROOT_FILES}:
@@ -324,7 +346,12 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    do_POST = _reject_method  # type: ignore[assignment]
+    def do_POST(self) -> None:  # noqa: N802
+        if urlsplit(self.path).path == "/api/syslog/clear":
+            self._serve_clear_syslog()
+        else:
+            self._reject_method()
+
     do_PUT = _reject_method  # type: ignore[assignment]
     do_DELETE = _reject_method  # type: ignore[assignment]
     do_PATCH = _reject_method  # type: ignore[assignment]
@@ -338,6 +365,7 @@ class AnalyticsHTTPServer(ThreadingHTTPServer):
     def __init__(self, address: tuple[str, int], settings: Settings, service: SnapshotService):
         self.settings = settings
         self.service = service
+        self.clear_token = secrets.token_urlsafe(32)
         super().__init__(address, AnalyticsHandler)
 
 

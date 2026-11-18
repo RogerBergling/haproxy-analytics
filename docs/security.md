@@ -36,7 +36,7 @@ The main assets are:
 - It does not call an external GeoIP service, map tile server, CDN, font server,
   analytics service or telemetry endpoint.
 - It does not write to the log source.
-- It does not store a database or persistent event history.
+- It does not store a database. The optional persistent syslog store writes only to the dedicated `/data` volume.
 - It does not decrypt TLS passthrough traffic.
 
 ## Required controls
@@ -257,6 +257,27 @@ logged, but the app does not intentionally log raw request lines or credentials.
 GoAccess stderr may contain a rejected log line and is logged locally for
 diagnostics; the dashboard receives a generic error message instead of raw log
 content.
+
+## Persistent syslog history
+
+When `SYSLOG_STORE_FILE` is set, accepted syslog lines are appended to a file in
+the dedicated `/data` volume. This file contains the same sensitive data as the
+HAProxy log: client IPs, hostnames and requested paths.
+
+Operator controls:
+
+- Keep the data directory writable only by the container user (UID/GID `10001`)
+  and trusted administrators.
+- Treat the data directory with the same retention and backup rules as the
+  HAProxy log.
+- Keep the dashboard behind the authenticated HAProxy frontend. The clear action
+  is available to any authenticated dashboard user.
+- The clear action is protected against cross-site POSTs by a per-process CSRF
+  token, but it is not a separate role-based permission.
+- Disk use is bounded by `SYSLOG_STORE_MAX_BYTES` and
+  `SYSLOG_STORE_BACKUPS`.
+- If the disk is full, new lines are not persisted; the app reports write
+  errors and may continue serving the existing dashboard data.
 
 ## Known limitations
 

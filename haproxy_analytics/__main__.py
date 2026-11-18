@@ -10,6 +10,7 @@ import sys
 
 from .config import ConfigError, Settings
 from .logsource import SyslogBuffer, SyslogServer
+from .syslog_store import SyslogStore
 from .server import create_server
 from .snapshot import SnapshotService
 from .version import version_info
@@ -81,6 +82,15 @@ def main(argv: list[str] | None = None) -> int:
     if settings.syslog_listen:
         assert settings.syslog_host is not None and settings.syslog_port is not None
         buffer = SyslogBuffer(settings.syslog_buffer_lines)
+        store = (
+            SyslogStore(
+                settings.syslog_store_file,
+                settings.syslog_store_max_bytes,
+                settings.syslog_store_backups,
+            )
+            if settings.syslog_store_file
+            else None
+        )
         syslog_server = SyslogServer(
             host=settings.syslog_host,
             port=settings.syslog_port,
@@ -88,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
             allowed=settings.syslog_allowed_networks,
             buffer=buffer,
             max_message_bytes=settings.syslog_max_message_bytes,
+            store=store,
             tls_cert=settings.syslog_tls_cert,
             tls_key=settings.syslog_tls_key,
             tls_ca=settings.syslog_tls_ca,

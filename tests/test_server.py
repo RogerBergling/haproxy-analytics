@@ -10,8 +10,10 @@ import unittest
 from contextlib import contextmanager
 from pathlib import Path
 
+from haproxy_analytics.logsource import SyslogBuffer, SyslogServer
 from haproxy_analytics.server import create_server
 from haproxy_analytics.snapshot import SnapshotService
+from haproxy_analytics.syslog_store import SyslogStore
 
 from tests.support import demo_settings
 
@@ -26,10 +28,11 @@ output.write_text("<!doctype html><title>fake goaccess</title>", encoding="utf-8
 
 
 @contextmanager
-def running_server(settings):
+def running_server(settings, service=None):
     settings = settings.with_overrides(port=0)
-    service = SnapshotService(settings)
-    service.refresh_once()
+    if service is None:
+        service = SnapshotService(settings)
+        service.refresh_once()
     server = create_server(settings, service)
     thread = threading.Thread(target=server.serve_forever, name="test-http", daemon=True)
     thread.start()
@@ -224,6 +227,66 @@ class ServerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp, running_server(demo_settings(Path(temp))) as (port, _service):
             status, _headers, _body = request(port, "GET", "/goaccess")
             self.assertEqual(status, 404)
+
+
+    def test_clear_syslog_history_requires_token(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            store_path = temp_path / "syslog.log"
+            store = SyslogStore(store_path, max_bytes=1024 * 1024, backups=1)
+            store.append(
+                'Nov 18 00:00:00 demo haproxy[1]: 192.0.2.10:1234 '
+                '[18/Nov/2026:00:00:00.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
+                '"GET / HTTP/1.1"'
+            )
+            store.close()
+            buffer = SyslogBuffer(100)
+            syslog = SyslogServer(
+                host="127.0.0.1",
+                port=0,
+                protocols=("udp",),
+                allowed=(ipaddress.ip_network("127.0.0.0/8"),),
+                buffer=buffer,
+                max_message_bytes=65536,
+                store=store,
+            )
+            settings = demo_settings(
+                temp_path,
+                demo=False,
+                log_file=None,
+                syslog_store_file=store_path,
+            )
+            service = SnapshotService(settings, syslog)
+            service.refresh_once()
+
+            with running_server(settings, service) as (port, _service):
+                status, _headers, body = request(port, "GET", "/api/snapshot")
+                payload = json.loads(body)
+                self.assertEqual(status, 200)
+                self.assertTrue(payload["meta"]["source"]["syslog"]["store"]["enabled"])
+                self.assertGreater(payload["visitors"]["total"], 0)
+
+                status, _headers, _body = request(port, "POST", "/api/syslog/clear")
+                self.assertEqual(status, 403)
+
+                status, _headers, body = request(port, "GET", "/api/clear-token")
+                token = json.loads(body)["token"]
+                status, _headers, body = request(
+                    port,
+                    "POST",
+                    "/api/syslog/clear",
+                    headers={"X-CSRF-Token": token},
+                )
+                self.assertEqual(status, 200)
+                self.assertTrue(json.loads(body)["cleared"])
+
+                status, _headers, body = request(port, "GET", "/api/snapshot")
+                payload = json.loads(body)
+                self.assertEqual(status, 200)
+                self.assertEqual(payload["visitors"]["total"], 0)
+                self.assertEqual(payload["meta"]["source"]["syslog"]["store"]["total_bytes"], 0)
+
+            syslog.stop()
 
     def test_goaccess_report_is_sandboxed(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
