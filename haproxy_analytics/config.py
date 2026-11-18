@@ -133,6 +133,7 @@ class Settings:
     goaccess_enabled: bool
     goaccess_binary: str
     goaccess_config: Path
+    goaccess_frontends: tuple[str, ...]
     goaccess_timeout: int
     goaccess_max_lines: int
     goaccess_max_html_bytes: int
@@ -224,6 +225,7 @@ class Settings:
             goaccess_enabled=_env_bool("GOACCESS_ENABLED", False),
             goaccess_binary=_env("GOACCESS_BINARY", "goaccess") or "goaccess",
             goaccess_config=goaccess_config,
+            goaccess_frontends=_env_csv("GOACCESS_FRONTENDS"),
             goaccess_timeout=_env_int("GOACCESS_TIMEOUT", 60, 1),
             goaccess_max_lines=_env_int("GOACCESS_MAX_LINES", 100000, 1),
             goaccess_max_html_bytes=_env_int("GOACCESS_MAX_HTML_BYTES", 5_000_000, 1024),

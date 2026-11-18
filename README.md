@@ -155,6 +155,7 @@ Copy [`.env.example`](.env.example) to `.env`. The most important settings:
 | `SYSLOG_ALLOWED_NETWORKS` | `127.0.0.0/8,::1/128` | Source allowlist for the syslog receiver. |
 | `SYSLOG_TLS_CERT` / `SYSLOG_TLS_KEY` | empty | Optional TCP TLS certificate and key. |
 | `GOACCESS_ENABLED` | `false` | Generate the optional GoAccess report. |
+| `GOACCESS_FRONTENDS` | empty | Comma-separated frontend allowlist for GoAccess input. Empty includes all HTTP frontends. |
 | `DEMO_MODE` | `false` | Use the bundled synthetic log. |
 
 The full reference is in [docs/deployment.md](docs/deployment.md). Never commit the resulting `.env`, logs, GeoIP databases or certificates.

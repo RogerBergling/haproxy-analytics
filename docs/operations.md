@@ -130,6 +130,7 @@ GoAccess is optional.
 
 ```dotenv
 GOACCESS_ENABLED=true
+GOACCESS_FRONTENDS=ft_web
 GOACCESS_TIMEOUT=60
 GOACCESS_MAX_LINES=100000
 ```
@@ -144,8 +145,29 @@ The image includes the `goaccess` binary and a bundled config at
 4. Restart and check the GoAccess tab and container logs.
 
 The app passes only HTTP lines (with the syslog prefix removed) to GoAccess. TLS
-SNI lines are not GoAccess input. A non-zero exit produces a generic dashboard
-message and a detailed local log entry.
+SNI lines are not GoAccess input. A non-zero exit produces a dashboard message
+that names the rejected field and a detailed local log entry.
+
+Set `GOACCESS_FRONTENDS` when the log contains more than one HTTP frontend with
+a different `log-format`. The local reference setup used `grep ' ft_web'`;
+the equivalent is:
+
+```dotenv
+GOACCESS_FRONTENDS=ft_web
+```
+
+With the bundled standard `option httplog` configuration, the app also:
+
+- normalizes a plain IPv6 client to `[address]:port`;
+- adds `.000` when a timestamp has no fractional seconds;
+- omits lines GoAccess cannot parse, including `---` status records and
+  simple-format lines that lack timers;
+- rewrites a `geoip-database` path to the matching `/geoip` file, or ignores
+  the line when the database is not mounted.
+
+Omitted lines are counted in the GoAccess status and the snapshot warnings. If
+the report still fails, the GoAccess status includes a `detail` field that names
+the field (`%h`, `%t`, `%s`, ...) GoAccess rejected.
 
 GoAccess validates the client address (`%h`), so the dashboard's `x.x.x.x` mask
 cannot be used in its input. When masking is active, the app writes masked

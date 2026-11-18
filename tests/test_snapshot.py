@@ -127,6 +127,51 @@ class SnapshotTests(unittest.TestCase):
         self.assertNotIn("192.0.2.20", html)
 
 
+    def test_goaccess_frontend_filter(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            log = temp_path / "haproxy.log"
+            log.write_text(
+                'Nov 18 00:00:00 demo haproxy[1]: 203.0.113.10:1234 '
+                '[18/Nov/2026:00:00:00.123] ft_a bk_app/app1 0/0/1/2/3 200 1 '
+                '"GET /a HTTP/1.1"\n'
+                'Nov 18 00:00:01 demo haproxy[1]: 203.0.113.11:1234 '
+                '[18/Nov/2026:00:00:01.123] ft_b bk_app/app1 0/0/1/2/3 200 1 '
+                '"GET /b HTTP/1.1"\n',
+                encoding="utf-8",
+            )
+            binary = temp_path / "goaccess"
+            binary.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "from pathlib import Path\n"
+                "args = sys.argv[1:]\n"
+                "source = Path(args[0])\n"
+                "output = Path(args[args.index('-o') + 1])\n"
+                "output.write_text(source.read_text(encoding='utf-8'), encoding='utf-8')\n",
+                encoding="utf-8",
+            )
+            binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
+            config = temp_path / "goaccess.conf"
+            config.write_text("time-format %H:%M:%S\n", encoding="utf-8")
+            settings = demo_settings(
+                temp_path,
+                demo=False,
+                log_file=log,
+                goaccess_enabled=True,
+                goaccess_frontends=("ft_a",),
+                goaccess_binary=str(binary),
+                goaccess_config=config,
+            )
+            service = SnapshotService(settings)
+            service.refresh_once()
+            html = service.goaccess_html() or ""
+            status = service.snapshot()["meta"]["goaccess"]
+
+        self.assertIn("GET /a", html)
+        self.assertNotIn("GET /b", html)
+        self.assertEqual(status["lines"], 1)
+
     def test_internal_ips_in_sni_and_backends_are_masked(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_path = Path(temp)

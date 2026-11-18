@@ -236,18 +236,20 @@ class SnapshotService:
                         aggregator.record_repeated()
                     aggregator.add(parsed)
                     if parsed.http_message and self.settings.goaccess_enabled:
-                        remaining = goaccess_cap - len(goaccess_lines)
-                        if remaining > 0:
-                            repeat = min(parsed.event.count, remaining)
-                            http_message = parsed.http_message
-                            if self.settings.mask_internal_ips or self.settings.mask_networks:
-                                http_message = mask_http_line(
-                                    http_message,
-                                    self.settings.mask_networks,
-                                    self.settings.mask_internal_ips,
-                                    self.settings.mask_full,
-                                )
-                            goaccess_lines.extend([http_message] * repeat)
+                        frontends = self.settings.goaccess_frontends
+                        if not frontends or parsed.event.frontend in frontends:
+                            remaining = goaccess_cap - len(goaccess_lines)
+                            if remaining > 0:
+                                repeat = min(parsed.event.count, remaining)
+                                http_message = parsed.http_message
+                                if self.settings.mask_internal_ips or self.settings.mask_networks:
+                                    http_message = mask_http_line(
+                                        http_message,
+                                        self.settings.mask_networks,
+                                        self.settings.mask_internal_ips,
+                                        self.settings.mask_full,
+                                    )
+                                goaccess_lines.extend([http_message] * repeat)
             finally:
                 geo.close()
 
@@ -267,13 +269,29 @@ class SnapshotService:
                 timeout=self.settings.goaccess_timeout,
                 max_lines=self.settings.goaccess_max_lines,
                 max_html_bytes=self.settings.goaccess_max_html_bytes,
+                geoip_city_db=self.settings.geoip_city_db,
+                geoip_asn_db=self.settings.geoip_asn_db,
             )
             goaccess_html: str | None = None
             goaccess_status = runner.status()
             if self.settings.goaccess_enabled:
+                if self.settings.goaccess_frontends and not goaccess_lines:
+                    warnings.append(
+                        "GOACCESS_FRONTENDS is set but no HTTP lines from those frontends "
+                        "were found. Check the configured names."
+                    )
                 goaccess_html, goaccess_status = runner.generate(goaccess_lines)
                 if goaccess_status.get("error") and goaccess_status["error"] not in warnings:
                     warnings.append(goaccess_status["error"])
+                if goaccess_status.get("skipped_lines"):
+                    warnings.append(
+                        f"{goaccess_status['skipped_lines']:,} HTTP lines were omitted from "
+                        "the GoAccess report because they do not match the standard "
+                        "option httplog format."
+                    )
+                for warning in goaccess_status.get("config_warnings", []):
+                    if warning not in warnings:
+                        warnings.append(warning)
 
             data["meta"] = {
                 "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),

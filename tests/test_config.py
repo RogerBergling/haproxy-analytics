@@ -44,6 +44,15 @@ class ConfigTests(unittest.TestCase):
             {"192.0.0.0/8", "172.0.0.0/8"},
         )
 
+    def test_goaccess_frontends(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"GOACCESS_FRONTENDS": "ft_a, ft_b"},
+            clear=True,
+        ):
+            settings = Settings.from_env()
+        self.assertEqual(settings.goaccess_frontends, ("ft_a", "ft_b"))
+
     def test_syslog_store(self) -> None:
         with patch.dict(
             os.environ,

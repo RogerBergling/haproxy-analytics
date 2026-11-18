@@ -101,6 +101,7 @@ uses the shell environment or CLI flags, not `.env` automatically.
 | `GOACCESS_ENABLED` | `false` | Generate the optional GoAccess report in the image. |
 | `GOACCESS_BINARY` | `goaccess` | GoAccess binary name or path. |
 | `GOACCESS_CONFIG` | `/app/config/goaccess-haproxy.conf` | GoAccess parser configuration inside the container. |
+| `GOACCESS_FRONTENDS` | empty | Comma-separated frontend allowlist for GoAccess input. Empty includes all HTTP frontends. |
 | `GOACCESS_TIMEOUT` | `60` | GoAccess execution timeout in seconds. |
 | `GOACCESS_MAX_LINES` | `100000` | Maximum HTTP lines passed to GoAccess. |
 | `GOACCESS_MAX_HTML_BYTES` | `5000000` | Maximum report size the app will serve. |
@@ -156,6 +157,7 @@ The image contains GoAccess. Enable it when you want the detailed report:
 
 ```dotenv
 GOACCESS_ENABLED=true
+GOACCESS_FRONTENDS=ft_web
 GOACCESS_TIMEOUT=60
 GOACCESS_MAX_LINES=100000
 ```
@@ -168,6 +170,18 @@ served in a sandboxed iframe. If your HAProxy `log-format` is not the standard
 GoAccess requires a valid IP in its client field, so masked clients are passed
 as `0.0.0.0` (`::` for IPv6) instead of `x.x.x.x`. The report groups them as one
 visitor and never receives the raw internal address.
+
+Set `GOACCESS_FRONTENDS` to the HTTP frontend that produces the report, for
+example `ft_web`. This mirrors `grep ' ft_web'` and prevents
+HTTP lines from other frontends with a different format from reaching
+GoAccess. Empty means all HTTP frontends.
+
+With the bundled standard `option httplog` configuration, the app normalizes
+plain IPv6 clients, adds missing fractional seconds and omits lines GoAccess
+cannot parse, such as `---` status records and simple-format lines. The report
+status and snapshot warnings show how many lines were omitted. GoAccess config
+files that reference missing GeoIP databases are adjusted automatically; the
+warning names the ignored path.
 
 ### Syslog receiver
 
@@ -314,6 +328,7 @@ CLI flags override the corresponding environment values.
 | Geo columns show Unknown | Is `maxminddb` installed and are both MMDB paths valid? Private addresses are intentionally not geolocated. |
 | GeoIP DB missing warning | Mount `./geoip` and set the two paths. The rest of the dashboard still works. |
 | GoAccess tab says not enabled | Set `GOACCESS_ENABLED=true` and restart. Check `docker compose logs` for format errors. |
+| GoAccess rejected the format | The report now names the rejected field. Check `GOACCESS_CONFIG`, or set `GOACCESS_FRONTENDS` to the HTTP frontend whose `log-format` matches it. |
 | Syslog buffer empty | Is `SYSLOG_LISTEN` set to `0.0.0.0:5514`, the Compose syslog port reachable and the sender allowlisted? Check the container logs and the health JSON. |
 | Viewer IP is the proxy | Set `TRUSTED_PROXIES` to the HAProxy address and ensure HAProxy sends `X-Forwarded-For`. |
 | 403/404 from HAProxy | Check the dashboard hostname, auth userlist and backend address. |

@@ -103,7 +103,9 @@ The test suite covers:
 - file-tail truncation without partial lines;
 - bounded syslog buffers;
 - UDP/TCP receiver allowlists, size limits and TCP TLS;
-- GoAccess disabled mode, missing binary, fake report generation and size limit;
+- GoAccess disabled mode, missing binary, fake report generation, size limit,
+  standard-format normalization, frontend filtering, GeoIP config paths and
+  error details;
 - internal IP masking and masked visitor grouping;
 - persistent syslog store append, rotation, clear and API token checks;
 - snapshot counts, warnings, source modes and failure fallback;
