@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "haproxy-analytics"
+version = "0.1.0"
+description = "Read-only HAProxy HTTP, TLS/SNI and GeoIP analytics dashboard"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Roger Bergling" }]
+dependencies = ["maxminddb==3.3.0"]
+
+[project.scripts]
+haproxy-analytics = "haproxy_analytics.__main__:main"
+
+[tool.setuptools]
+packages = ["haproxy_analytics"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"

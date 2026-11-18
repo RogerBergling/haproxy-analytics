@@ -1,13 +1,219 @@
-# haproxy-analytics
+# HAProxy Analytics
 
-HAProxy Analytics HTTP · TLS/SNI · Geography · Networks
+[![CI](https://github.com/RogerBergling/haproxy-analytics/actions/workflows/ci.yml/badge.svg)](https://github.com/RogerBergling/haproxy-analytics/actions/workflows/ci.yml)
+[![Publish Docker image](https://github.com/RogerBergling/haproxy-analytics/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/RogerBergling/haproxy-analytics/actions/workflows/docker-publish.yml)
+[![Secret scan](https://github.com/RogerBergling/haproxy-analytics/actions/workflows/gitleaks.yml/badge.svg)](https://github.com/RogerBergling/haproxy-analytics/actions/workflows/gitleaks.yml)
 
-## Getting started
+**Read-only HAProxy traffic intelligence: HTTP requests, TLS/SNI connections, client geography, ASN networks and a searchable visitor table — without shipping logs to a third party.**
 
-Describe how to install, configure, and run this project here.
+HAProxy Analytics is a small self-hosted service. It reads HAProxy logs from a mounted file or an optional syslog receiver, enriches client addresses with local MaxMind GeoLite2 databases, and serves a dark, responsive dashboard. The container has no database, no upload endpoint and no persistent write path. The browser makes no third-party requests.
 
-## Repository notes
+> **The dashboard contains client IP addresses, hostnames and requested paths. It has no built-in login.** Run it behind HAProxy with TLS and authentication. The default Compose file binds the published port to `127.0.0.1`.
 
-- The default branch is `main`.
-- Local secrets belong in `.env`; only `.env.example` should be committed.
-- Run `git-create` in this directory to verify the repository before pushing.
+---
+
+## What it does
+
+- **HTTP analytics** from HAProxy `option httplog` records: requests, bandwidth, methods, status codes, backends and requested paths.
+- **TLS/SNI analytics** from a TCP frontend that captures `req.ssl_sni`: hostnames, countries, ASNs and recent connections.
+- **Geo access** view: a world map plus searchable country and city tables, styled to match the other self-hosted apps in this workspace.
+- **Visitor table** grouped by observed client IP: SNI hostnames, HTTP backends, event counts and last-seen time.
+- **"This is you"** highlight through the local `/api/whoami` endpoint. Forwarded addresses are trusted only from explicitly configured proxies.
+- **Optional GoAccess report** in a sandboxed iframe for operators who already use GoAccess.
+- **Optional syslog receiver** for HAProxy hosts that cannot mount a log file locally. Disabled by default, with a source allowlist and optional TCP TLS/mTLS.
+- **Graceful degradation**: no MaxMind database, no GoAccess and no log file do not crash the dashboard; they produce clear warnings and an empty state.
+
+## Quick start
+
+### Docker Compose
+
+```bash
+git clone https://github.com/RogerBergling/haproxy-analytics.git
+cd haproxy-analytics
+cp .env.example .env
+mkdir -p logs geoip
+
+# Put the current HAProxy log here (read-only inside the container):
+#   logs/haproxy.log
+# Optionally place GeoLite2-City.mmdb and GeoLite2-ASN.mmdb in geoip/.
+
+docker compose up -d
+```
+
+Open <http://127.0.0.1:8080>. In production, put HAProxy in front of that port for TLS and authentication. See [docs/deployment.md](docs/deployment.md) and [docs/haproxy.md](docs/haproxy.md).
+
+The published image is:
+
+```text
+ghcr.io/rogerbergling/haproxy-analytics:latest
+```
+
+If GHCR reports the package as private on the first pull, either make it public
+under **GitHub → Packages → haproxy-analytics → Package settings**, or
+authenticate with a token that has `read:packages`:
+
+```bash
+echo "$CR_PAT" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+```
+
+### Try it without logs
+
+```bash
+docker run --rm -p 127.0.0.1:8080:8080 \
+  -e DEMO_MODE=true -e HAPROXY_LOG_FILE= \
+  --read-only --cap-drop=ALL \
+  --security-opt=no-new-privileges:true \
+  --tmpfs /tmp:rw,noexec,nosuid,size=32m \
+  ghcr.io/rogerbergling/haproxy-analytics:latest
+```
+
+Or from a checkout:
+
+```bash
+make demo
+```
+
+The demo uses synthetic `example.com` hostnames and documentation/public resolver addresses. It contains no real user or infrastructure data.
+
+### Local Python
+
+Requires Python 3.11+ and `maxminddb`:
+
+```bash
+python3 -m pip install -r requirements.txt
+python3 -m haproxy_analytics --demo --bind 127.0.0.1 --port 8080
+```
+
+## Architecture
+
+```text
+HAProxy log file ──┐
+                   ├──> parser ──> in-memory aggregator ──> snapshot JSON
+optional syslog ───┘                    │
+                                        ├──> local GeoLite2 City/ASN lookup
+                                        └──> optional GoAccess report
+                                                    │
+browser <── same-origin HTTP <── Python server <─────┘
+   │                              │
+   └── /api/whoami (trusted proxy aware)
+```
+
+The server never writes to the log source. It keeps one bounded snapshot in memory, rebuilds it on a timer, and serves the static dashboard plus a small JSON API. There is no database, queue or persistent state. See [docs/architecture.md](docs/architecture.md).
+
+## Supported HAProxy formats
+
+HTTP records use the standard `option httplog` field order:
+
+```text
+203.0.113.10:53124 [18/Nov/2026:00:01:02.123] ft_https bk_app/app1 0/0/1/2/3 200 5120 "GET / HTTP/1.1"
+```
+
+TLS/SNI records use a TCP frontend with a custom log format:
+
+```text
+src=203.0.113.10 dst=198.51.100.10:443 sni=app.example.com
+```
+
+Both syslog-wrapped and plain lines are accepted. Syslog `message repeated N times` groups are expanded. See [docs/operations.md](docs/operations.md) for format troubleshooting.
+
+## External HAProxy logs
+
+The log file can be mounted from the HAProxy host, or forwarded from another server. The recommended separate-host options are:
+
+1. **Central rsyslog over TLS** → writes a local HAProxy log → mount it read-only into the container. Best history and operational fit.
+2. **Built-in syslog receiver** → HAProxy/rsyslog sends events directly to the app. Useful for a dedicated analytics container; the receiver is in-memory only and must be protected by a source allowlist and optional TLS.
+
+The complete comparison, forwarding examples and security requirements are in [docs/external-logs.md](docs/external-logs.md).
+
+## Configuration
+
+Copy [`.env.example`](.env.example) to `.env`. The most important settings:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `APP_BIND` | `127.0.0.1` | Host interface used by Compose. Keep loopback unless HAProxy is on the same host and you understand the exposure. |
+| `APP_PORT` | `8080` | Published dashboard port. |
+| `HAPROXY_LOG_DIR` | `./logs` | Host directory containing the log. Mounted read-only. |
+| `HAPROXY_LOG_FILE` | `/logs/haproxy.log` | Log path inside the container. Empty disables file mode. |
+| `REFRESH_SECONDS` | `60` | Snapshot rebuild interval. |
+| `MAX_LOG_BYTES` | `33554432` | Tail window read from the log file. |
+| `GEOIP_DIR` | `./geoip` | Host directory containing `GeoLite2-*.mmdb`. |
+| `GEOIP_CITY_DB` / `GEOIP_ASN_DB` | `/geoip/...` | Database paths inside the container. |
+| `TRUSTED_PROXIES` | empty | Comma-separated proxy IPs/CIDRs allowed to supply `X-Forwarded-For`. |
+| `SYSLOG_LISTEN` | empty | Optional `host:port` syslog listener. Empty disables it. |
+| `SYSLOG_ALLOWED_NETWORKS` | `127.0.0.0/8,::1/128` | Source allowlist for the syslog receiver. |
+| `SYSLOG_TLS_CERT` / `SYSLOG_TLS_KEY` | empty | Optional TCP TLS certificate and key. |
+| `GOACCESS_ENABLED` | `false` | Generate the optional GoAccess report. |
+| `DEMO_MODE` | `false` | Use the bundled synthetic log. |
+
+The full reference is in [docs/deployment.md](docs/deployment.md). Never commit the resulting `.env`, logs, GeoIP databases or certificates.
+
+## Security model
+
+- **No built-in login.** HAProxy must terminate TLS and authenticate the dashboard.
+- **Loopback by default.** Compose publishes `127.0.0.1:8080`, not a public interface.
+- **Read-only container.** Non-root user, read-only root filesystem, all capabilities dropped, `no-new-privileges`, small `/tmp` tmpfs.
+- **No third-party browser requests.** No CDN, external fonts, analytics, map tiles or IP-lookup service. A strict CSP blocks outbound connections.
+- **A local GeoIP lookup.** MaxMind databases are mounted files; client IPs are never sent to MaxMind or anyone else.
+- **Explicit proxy trust.** `X-Forwarded-For` is ignored unless the immediate peer is in `TRUSTED_PROXIES`.
+- **Bounded inputs.** Log tail size, visitor rows, syslog message size and GoAccess report size are all capped.
+- **Sandboxed GoAccess.** The optional report cannot read the parent page or make network requests.
+- **Secret scanning.** Gitleaks runs in CI. The repository contains only synthetic demo data.
+
+Read [SECURITY.md](SECURITY.md) and [docs/security.md](docs/security.md) before exposing the dashboard.
+
+## Documentation
+
+| Document | Contents |
+| --- | --- |
+| [Architecture](docs/architecture.md) | Components, data flow and design decisions. |
+| [Deployment](docs/deployment.md) | Compose, `.env`, volumes, permissions, upgrades and troubleshooting. |
+| [HAProxy configuration](docs/haproxy.md) | TLS termination, HTTP logging, SNI capture and an authenticated dashboard frontend. |
+| [External logs](docs/external-logs.md) | File mounts, rsyslog over TLS and the built-in syslog receiver. |
+| [GeoIP](docs/geoip.md) | MaxMind databases, optional updater and privacy notes. |
+| [Security](docs/security.md) | Threat model, trust boundaries, data handling and operator checklist. |
+| [Operations](docs/operations.md) | Runbook, parser troubleshooting, performance and log rotation. |
+| [Development](docs/development.md) | Layout, tests, validation and contribution rules. |
+
+Ready-to-adapt examples are in [`examples/haproxy/`](examples/haproxy/) and [`examples/rsyslog/`](examples/rsyslog/). They use `example.com`, documentation addresses and placeholders only.
+
+## Development and validation
+
+```bash
+make test       # unit tests
+make verify     # repository/private-data/security checks
+make smoke      # real server with demo data and HTTP contract checks
+make validate   # compile + test + verify + smoke
+```
+
+The CI workflow runs tests on Python 3.11 and 3.12, verifies the repository, runs the smoke test and builds the Docker image. The publish workflow builds `linux/amd64` and `linux/arm64` and pushes to GHCR.
+
+## Repository hygiene
+
+- The local `target/` reproduction bundle is **ignored** and must never be
+  force-added. It contains the original server-specific notes.
+- Real logs, `.env`, MaxMind databases, certificates and private HAProxy
+  configurations are ignored by default.
+- `scripts/verify.py` rejects common private-address and private-domain tokens,
+  checks container hardening and checks the dashboard for unsafe HTML patterns.
+- Gitleaks scans the full history in CI. Review the diff before publishing.
+- If you use the local `git-create` workflow, run it as an additional check
+  before pushing.
+
+## Non-goals
+
+- Terminating TLS inside this app. Use HAProxy.
+- Decrypting TLS passthrough traffic. SNI analytics observes ClientHello metadata only.
+- Replacing a SIEM, long-term log store or intrusion detection system.
+- Storing raw logs, building a persistent history or multi-user collaboration.
+- Sending analytics, GeoIP lookups or telemetry to a third party.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+The published image also contains the separate GoAccess program, which is
+GPL-2.0 licensed. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the
+source links and the other component notices.
+
+This is an independent self-hosted tool, not official HAProxy or MaxMind software. HAProxy and MaxMind have their own licenses and trademarks.

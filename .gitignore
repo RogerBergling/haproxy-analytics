@@ -36,6 +36,7 @@ Thumbs.db
 # Logs and coverage
 # ---------------------------------------------------------------------------
 *.log
+!examples/demo-haproxy.log
 .coverage
 .coverage.*
 htmlcov/
@@ -83,3 +84,8 @@ target/
 *.sqlite
 *.sqlite3
 *.db
+*.mmdb
+logs/
+geoip/
+certs/
+data/

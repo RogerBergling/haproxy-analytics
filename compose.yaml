@@ -1,0 +1,85 @@
+name: haproxy-analytics
+
+# Quick start:
+#   cp .env.example .env
+#   mkdir -p logs geoip
+#   cp /path/to/haproxy.log logs/
+#   docker compose up -d
+#
+# The image is published at ghcr.io/rogerbergling/haproxy-analytics.
+# The dashboard contains client IP addresses and request data. Keep the port
+# bound to 127.0.0.1 and put HAProxy in front for TLS and authentication.
+
+services:
+  haproxy-analytics:
+    image: ghcr.io/rogerbergling/haproxy-analytics:${IMAGE_TAG:-latest}
+    container_name: haproxy-analytics
+    environment:
+      APP_BIND: 0.0.0.0
+      APP_PORT: "8080"
+      HAPROXY_LOG_FILE: ${HAPROXY_LOG_FILE-/logs/haproxy.log}
+      REFRESH_SECONDS: ${REFRESH_SECONDS:-60}
+      MAX_LOG_BYTES: ${MAX_LOG_BYTES:-33554432}
+      MAX_VISITOR_ROWS: ${MAX_VISITOR_ROWS:-5000}
+      GEOIP_CITY_DB: ${GEOIP_CITY_DB:-/geoip/GeoLite2-City.mmdb}
+      GEOIP_ASN_DB: ${GEOIP_ASN_DB:-/geoip/GeoLite2-ASN.mmdb}
+      DEMO_MODE: ${DEMO_MODE:-false}
+      GOACCESS_ENABLED: ${GOACCESS_ENABLED:-false}
+      GOACCESS_BINARY: ${GOACCESS_BINARY:-goaccess}
+      GOACCESS_CONFIG: ${GOACCESS_CONFIG:-/app/config/goaccess-haproxy.conf}
+      GOACCESS_TIMEOUT: ${GOACCESS_TIMEOUT:-60}
+      GOACCESS_MAX_LINES: ${GOACCESS_MAX_LINES:-100000}
+      GOACCESS_MAX_HTML_BYTES: ${GOACCESS_MAX_HTML_BYTES:-5000000}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      SYSLOG_LISTEN: ${SYSLOG_LISTEN:-}
+      SYSLOG_PROTOCOLS: ${SYSLOG_PROTOCOLS:-udp}
+      SYSLOG_ALLOWED_NETWORKS: ${SYSLOG_ALLOWED_NETWORKS:-127.0.0.0/8,::1/128}
+      SYSLOG_BUFFER_LINES: ${SYSLOG_BUFFER_LINES:-200000}
+      SYSLOG_MAX_MESSAGE_BYTES: ${SYSLOG_MAX_MESSAGE_BYTES:-65536}
+      SYSLOG_TLS_CERT: ${SYSLOG_TLS_CERT:-}
+      SYSLOG_TLS_KEY: ${SYSLOG_TLS_KEY:-}
+      SYSLOG_TLS_CA: ${SYSLOG_TLS_CA:-}
+      SYSLOG_TLS_REQUIRE_CLIENT_CERT: ${SYSLOG_TLS_REQUIRE_CLIENT_CERT:-false}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8080}:8080"
+      # Enable these only when the syslog receiver is configured and the
+      # sending host is restricted by the network allowlist and firewall.
+      # - "${SYSLOG_BIND:-127.0.0.1}:${SYSLOG_PORT:-5514}:5514/udp"
+      # - "${SYSLOG_BIND:-127.0.0.1}:${SYSLOG_PORT:-5514}:5514/tcp"
+    volumes:
+      - "${HAPROXY_LOG_DIR:-./logs}:/logs:ro"
+      - "${GEOIP_DIR:-./geoip}:/geoip:ro"
+      # - "${SYSLOG_CERT_DIR:-./certs}:/certs:ro"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    # Pin a reviewed digest in production. Update explicitly with `docker compose pull`.
+    pull_policy: if_not_present
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2).read()"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+
+  # Optional one-shot GeoLite2 updater. It writes to the same host directory
+  # that the dashboard mounts read-only. Run it on a schedule of your choice:
+  #   docker compose --profile geoip run --rm geoip-update
+  geoip-update:
+    image: maxmindinc/geoipupdate:v7.1.1@sha256:faecdca22579730ab0b7dea5aa9af350bb3c93cb9d39845c173639ead30346d2
+    profiles: ["geoip"]
+    environment:
+      GEOIPUPDATE_ACCOUNT_ID: ${GEOIP_ACCOUNT_ID:-}
+      GEOIPUPDATE_LICENSE_KEY: ${GEOIP_LICENSE_KEY:-}
+      GEOIPUPDATE_EDITION_IDS: ${GEOIP_EDITION_IDS:-GeoLite2-City GeoLite2-ASN}
+      GEOIPUPDATE_FREQUENCY: "0"
+    volumes:
+      - "${GEOIP_DIR:-./geoip}:/usr/share/GeoIP"
+    restart: "no"

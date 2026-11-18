@@ -1,0 +1,29 @@
+Nov 18 00:01:02 demo-haproxy haproxy[1234]: 203.0.113.10:53124 [18/Nov/2026:00:01:02.123] ft_https bk_app/app1 0/0/1/2/3 200 5120 "GET / HTTP/1.1"
+Nov 18 00:01:03 demo-haproxy haproxy[1234]: src=203.0.113.10 dst=198.51.100.10:443 sni=app.example.com
+Nov 18 00:01:04 demo-haproxy haproxy[1234]: 203.0.113.11:53125 [18/Nov/2026:00:01:04.201] ft_https bk_app/app1 0/0/1/1/2 200 8244 "GET /assets/app.css HTTP/1.1"
+Nov 18 00:01:05 demo-haproxy haproxy[1234]: 203.0.113.11:53126 [18/Nov/2026:00:01:05.001] ft_https bk_static/static1 0/0/1/1/4 304 0 "GET /assets/logo.svg HTTP/1.1"
+Nov 18 00:01:06 demo-haproxy haproxy[1234]: src=203.0.113.11 dst=198.51.100.10:443 sni=www.example.com
+Nov 18 00:01:07 demo-haproxy haproxy[1234]: 203.0.113.12:53127 [18/Nov/2026:00:01:07.450] ft_https bk_api/api1 0/0/2/4/4 201 512 "POST /api/items HTTP/1.1"
+Nov 18 00:01:08 demo-haproxy haproxy[1234]: 203.0.113.12:53128 [18/Nov/2026:00:01:08.111] ft_https bk_api/api1 0/0/1/2/3 404 144 "GET /api/missing HTTP/1.1"
+Nov 18 00:01:09 demo-haproxy haproxy[1234]: src=203.0.113.12 dst=198.51.100.10:443 sni=api.example.com
+Nov 18 00:01:10 demo-haproxy haproxy[1234]: 8.8.8.8:53129 [18/Nov/2026:00:01:10.300] ft_https bk_app/app1 0/0/1/1/2 200 4096 "GET /search?q=example HTTP/1.1"
+Nov 18 00:01:11 demo-haproxy haproxy[1234]: src=8.8.8.8 dst=198.51.100.10:443 sni=app.example.com
+Nov 18 00:01:12 demo-haproxy haproxy[1234]: 1.1.1.1:53130 [18/Nov/2026:00:01:12.777] ft_https bk_static/static1 0/0/1/1/2 200 20480 "GET /assets/world-dark.svg HTTP/1.1"
+Nov 18 00:01:13 demo-haproxy haproxy[1234]: src=1.1.1.1 dst=198.51.100.10:443 sni=www.example.com
+Nov 18 00:01:14 demo-haproxy haproxy[1234]: 9.9.9.9:53131 [18/Nov/2026:00:01:14.019] ft_https bk_app/app1 0/0/1/3/4 500 210 "GET /dashboard HTTP/1.1"
+Nov 18 00:01:15 demo-haproxy haproxy[1234]: src=9.9.9.9 dst=198.51.100.10:443 sni=api.example.com
+Nov 18 00:01:16 demo-haproxy haproxy[1234]: 203.0.113.20:53132 [18/Nov/2026:00:01:16.500] ft_https bk_api/api1 0/0/1/2/3 401 88 "GET /api/private HTTP/1.1"
+Nov 18 00:01:17 demo-haproxy haproxy[1234]: 203.0.113.20:53133 [18/Nov/2026:00:01:17.610] ft_https bk_api/api1 0/0/1/1/2 429 72 "GET /api/limited HTTP/1.1"
+Nov 18 00:01:18 demo-haproxy haproxy[1234]: src=203.0.113.20 dst=198.51.100.10:443 sni=tls.example.net
+Nov 18 00:01:19 demo-haproxy haproxy[1234]: 198.51.100.44:53134 [18/Nov/2026:00:01:19.888] ft_https bk_default/backend1 0/0/1/1/2 502 120 "GET /upstream HTTP/1.1"
+Nov 18 00:01:20 demo-haproxy haproxy[1234]: src=198.51.100.44 dst=198.51.100.10:443 sni=tls.example.net
+Nov 18 00:01:21 demo-haproxy haproxy[2345]: [2001:db8::10]:53135 [18/Nov/2026:00:01:21.010] ft_https bk_app/app1 0/0/1/1/2 200 3072 "GET /ipv6 HTTP/1.1"
+Nov 18 00:01:22 demo-haproxy haproxy[2345]: src=2001:db8::10 dst=[2001:db8::20]:443 sni=ipv6.example.org
+Nov 18 00:01:24 demo-haproxy haproxy[2345]: 203.0.113.30:53136 [18/Nov/2026:00:01:24.400] ft_https bk_api/api1 0/0/1/4/5 503 96 "HEAD /health HTTP/1.1"
+Nov 18 00:01:25 demo-haproxy haproxy[2345]: message repeated 3 times: [ src=203.0.113.30 dst=198.51.100.10:443 sni=api.example.com]
+Nov 18 00:01:26 demo-haproxy haproxy[2345]: message repeated 2 times: [ 203.0.113.40:53137 [18/Nov/2026:00:01:26.000] ft_https bk_static/static1 0/0/1/1/2 304 0 "GET /assets/app.js HTTP/1.1"]
+Nov 18 00:01:27 demo-haproxy haproxy[2345]: 203.0.113.40:53138 [18/Nov/2026:00:01:27.000] ft_https bk_static/static1 0/0/1/1/2 200 8192 "GET /assets/app.js HTTP/1.1"
+Nov 18 00:01:28 demo-haproxy haproxy[2345]: 203.0.113.40:53139 [18/Nov/2026:00:01:28.000] ft_https bk_app/app1 200 1024 "GET /simple-format HTTP/1.1"
+Nov 18 00:01:30 demo-haproxy haproxy[2345]: 203.0.113.50:53140 [18/Nov/2026:00:01:30.000] ft_https bk_app/app1 0/0/1/2/3 200 2048 "OPTIONS /api/items HTTP/1.1"
+Nov 18 00:01:31 demo-haproxy haproxy[2345]: 203.0.113.50:53141 [18/Nov/2026:00:01:31.000] ft_https bk_app/app1 0/0/1/2/3 301 256 "GET /old-path HTTP/1.1"
+Nov 18 00:01:32 demo-haproxy haproxy[2345]: 203.0.113.50:53142 [18/Nov/2026:00:01:32.000] ft_https bk_app/app1 0/0/1/2/3 400 128 "GET /search?q=%3Cscript%3E HTTP/1.1"

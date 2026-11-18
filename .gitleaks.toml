@@ -1,0 +1,12 @@
+title = "HAProxy Analytics"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documentation placeholders only. Add a narrow regex here if a synthetic value trips a rule; never allowlist real files wholesale."
+regexes = [
+  '''YOUR_MAXMIND_ACCOUNT_ID''',
+  '''YOUR_MAXMIND_LICENSE_KEY''',
+  '''REPLACE_WITH_A_REAL_HASH''',
+]
