@@ -12,7 +12,7 @@ from typing import Any
 from .aggregate import Aggregator
 from .config import Settings
 from .geoip import GeoResolver
-from .goaccess import GoAccessRunner
+from .goaccess import GoAccessRunner, build_goaccess_line
 from .logsource import SyslogServer, read_log_tail
 from .parser import parse_line
 from .privacy import mask_http_line
@@ -224,6 +224,17 @@ class SnapshotService:
             )
             goaccess_lines: list[str] = []
             goaccess_cap = self.settings.goaccess_max_lines
+            runner = GoAccessRunner(
+                enabled=self.settings.goaccess_enabled,
+                binary=self.settings.goaccess_binary,
+                config=self.settings.goaccess_config,
+                timeout=self.settings.goaccess_timeout,
+                max_lines=self.settings.goaccess_max_lines,
+                max_html_bytes=self.settings.goaccess_max_html_bytes,
+                geoip_city_db=self.settings.geoip_city_db,
+                geoip_asn_db=self.settings.geoip_asn_db,
+            )
+            use_standard_lines = runner.uses_standard_format()
 
             try:
                 for line in lines:
@@ -241,14 +252,25 @@ class SnapshotService:
                             remaining = goaccess_cap - len(goaccess_lines)
                             if remaining > 0:
                                 repeat = min(parsed.event.count, remaining)
-                                http_message = parsed.http_message
-                                if self.settings.mask_internal_ips or self.settings.mask_networks:
-                                    http_message = mask_http_line(
-                                        http_message,
+                                if use_standard_lines:
+                                    http_message = build_goaccess_line(
+                                        parsed.event,
                                         self.settings.mask_networks,
                                         self.settings.mask_internal_ips,
                                         self.settings.mask_full,
                                     )
+                                else:
+                                    http_message = parsed.http_message
+                                    if (
+                                        self.settings.mask_internal_ips
+                                        or self.settings.mask_networks
+                                    ):
+                                        http_message = mask_http_line(
+                                            http_message,
+                                            self.settings.mask_networks,
+                                            self.settings.mask_internal_ips,
+                                            self.settings.mask_full,
+                                        )
                                 goaccess_lines.extend([http_message] * repeat)
             finally:
                 geo.close()
@@ -262,16 +284,6 @@ class SnapshotService:
                     "HAProxy format and were ignored."
                 )
 
-            runner = GoAccessRunner(
-                enabled=self.settings.goaccess_enabled,
-                binary=self.settings.goaccess_binary,
-                config=self.settings.goaccess_config,
-                timeout=self.settings.goaccess_timeout,
-                max_lines=self.settings.goaccess_max_lines,
-                max_html_bytes=self.settings.goaccess_max_html_bytes,
-                geoip_city_db=self.settings.geoip_city_db,
-                geoip_asn_db=self.settings.geoip_asn_db,
-            )
             goaccess_html: str | None = None
             goaccess_status = runner.status()
             if self.settings.goaccess_enabled:
@@ -285,9 +297,9 @@ class SnapshotService:
                     warnings.append(goaccess_status["error"])
                 if goaccess_status.get("skipped_lines"):
                     warnings.append(
-                        f"{goaccess_status['skipped_lines']:,} HTTP lines were omitted from "
-                        "the GoAccess report because they do not match the standard "
-                        "option httplog format."
+                        f"{goaccess_status['skipped_lines']:,} HTTP events were omitted from "
+                        "the GoAccess report because they could not be represented in the "
+                        "standard GoAccess format."
                     )
                 for warning in goaccess_status.get("config_warnings", []):
                     if warning not in warnings:

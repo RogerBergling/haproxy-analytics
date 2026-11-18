@@ -133,7 +133,7 @@ def mask_text_ips(
     return _IPV6_BRACKET.sub(replace_v6, _IPV4.sub(replace_v4, text))
 
 
-def _goaccess_host(
+def goaccess_host(
     value: str,
     networks: tuple[IPNetwork, ...],
     mask_non_global: bool,
@@ -177,13 +177,13 @@ def mask_http_line(
             candidate = client[1:end]
             if should_mask(candidate, networks, mask_non_global):
                 client = (
-                    f"[{_goaccess_host(candidate, networks, mask_non_global)}]"
+                    f"[{goaccess_host(candidate, networks, mask_non_global)}]"
                     + client[end + 1 :]
                 )
     else:
         candidate, separator, port = client.rpartition(":")
         if separator and should_mask(candidate, networks, mask_non_global):
-            host = _goaccess_host(candidate, networks, mask_non_global)
+            host = goaccess_host(candidate, networks, mask_non_global)
             if ":" in host:
                 host = f"[{host}]"
             client = f"{host}:{port}"

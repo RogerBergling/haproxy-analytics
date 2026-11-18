@@ -176,12 +176,12 @@ example `ft_web`. This mirrors `grep ' ft_web'` and prevents
 HTTP lines from other frontends with a different format from reaching
 GoAccess. Empty means all HTTP frontends.
 
-With the bundled standard `option httplog` configuration, the app normalizes
-plain IPv6 clients, adds missing fractional seconds and omits lines GoAccess
-cannot parse, such as `---` status records and simple-format lines. The report
-status and snapshot warnings show how many lines were omitted. GoAccess config
-files that reference missing GeoIP databases are adjusted automatically; the
-warning names the ignored path.
+With the bundled standard `option httplog` configuration, the app builds the
+GoAccess input from its parsed HTTP events. Custom captures, extra fields and
+custom field order in the raw log do not reach GoAccess. Events GoAccess cannot
+represent, such as `---` status records, are omitted and counted. GoAccess
+config files that reference missing GeoIP databases are adjusted
+automatically; the warning names the ignored path.
 
 ### Syslog receiver
 

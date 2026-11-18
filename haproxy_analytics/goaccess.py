@@ -17,6 +17,10 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from .config import IPNetwork
+from .parser import HttpEvent
+from .privacy import goaccess_host, mask_text_ips
+
 LOGGER = logging.getLogger(__name__)
 
 _STANDARD_LOG_FORMAT = '%h:%^ [%d:%t.%^] %^ %^ %^ %s %b %^ %^ %^ %^ %^ "%r"'
@@ -95,6 +99,33 @@ def _normalize_standard_line(line: str) -> tuple[str | None, str | None]:
     )
 
 
+def build_goaccess_line(
+    event: HttpEvent,
+    networks: tuple[IPNetwork, ...] = (),
+    mask_non_global: bool = True,
+    mask_full: bool = False,
+) -> str:
+    """Build a line in the exact shape of the bundled GoAccess config.
+
+    The raw HAProxy line can contain optional captures, custom fields or a
+    different field order. The app already has the parsed event, so generate a
+    deterministic standard line instead. This removes the raw line's format
+    variations from the GoAccess input entirely.
+    """
+
+    host = goaccess_host(event.ip, networks, mask_non_global)
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    frontend = mask_text_ips(event.frontend, networks, mask_non_global, mask_full) or "-"
+    backend = mask_text_ips(event.backend, networks, mask_non_global, mask_full) or "-"
+    path = mask_text_ips(event.path, networks, mask_non_global, mask_full).replace('"', "%22")
+    request = "-" if event.method == "-" else f"{event.method} {path} {event.protocol}"
+    return (
+        f'{host}:0 [{event.timestamp}] {frontend} {backend}/- 0/0/0/0/0 '
+        f'{event.status} {event.bytes} - - ---- 0/0/0/0/0 0/0 "{request}"'
+    )
+
+
 def _config_directives(path: Path) -> dict[str, str]:
     """Return the simple ``key value`` directives used by GoAccess."""
 
@@ -148,7 +179,7 @@ class GoAccessRunner:
             "error": None if available else f"GoAccess binary not found: {self.binary}",
         }
 
-    def _uses_standard_format(self) -> bool:
+    def uses_standard_format(self) -> bool:
         if not self.config.is_file():
             return True
         directives = _config_directives(self.config)
@@ -162,7 +193,7 @@ class GoAccessRunner:
         )
 
     def _prepare_lines(self, lines: list[str]) -> tuple[list[str], int, dict[str, int]]:
-        if not self._uses_standard_format():
+        if not self.uses_standard_format():
             return list(lines), 0, {}
         prepared: list[str] = []
         reasons: dict[str, int] = {}

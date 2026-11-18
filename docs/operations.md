@@ -156,18 +156,19 @@ the equivalent is:
 GOACCESS_FRONTENDS=ft_web
 ```
 
-With the bundled standard `option httplog` configuration, the app also:
+With the bundled standard `option httplog` configuration, the app builds a
+clean standard line from each parsed HTTP event instead of forwarding the raw
+log line. Custom captures, extra fields and format variations therefore do not
+reach GoAccess. The generated line uses the parsed client address, timestamp,
+frontend, backend, status, response size and request.
 
-- normalizes a plain IPv6 client to `[address]:port`;
-- adds `.000` when a timestamp has no fractional seconds;
-- omits lines GoAccess cannot parse, including `---` status records and
-  simple-format lines that lack timers;
-- rewrites a `geoip-database` path to the matching `/geoip` file, or ignores
-  the line when the database is not mounted.
+Events GoAccess cannot represent, such as `---` status records, are omitted and
+counted in the GoAccess status and snapshot warnings. A `geoip-database` path
+that points to a missing file is rewritten to the matching `/geoip` file, or
+ignored when the database is not mounted.
 
-Omitted lines are counted in the GoAccess status and the snapshot warnings. If
-the report still fails, the GoAccess status includes a `detail` field that names
-the field (`%h`, `%t`, `%s`, ...) GoAccess rejected.
+If the report still fails, the GoAccess status includes a `detail` field that
+names the field (`%h`, `%t`, `%s`, ...) GoAccess rejected.
 
 GoAccess validates the client address (`%h`), so the dashboard's `x.x.x.x` mask
 cannot be used in its input. When masking is active, the app writes masked

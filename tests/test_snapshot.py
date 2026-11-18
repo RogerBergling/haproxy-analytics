@@ -11,7 +11,7 @@ from unittest.mock import patch
 from haproxy_analytics.logsource import SyslogBuffer, SyslogServer
 from haproxy_analytics.snapshot import SnapshotService
 
-from tests.support import DEMO_LOG, demo_settings
+from tests.support import DEMO_LOG, PROJECT_ROOT, demo_settings
 
 
 class SnapshotTests(unittest.TestCase):
@@ -171,6 +171,57 @@ class SnapshotTests(unittest.TestCase):
         self.assertIn("GET /a", html)
         self.assertNotIn("GET /b", html)
         self.assertEqual(status["lines"], 1)
+
+    def test_standard_goaccess_input_is_rebuilt_from_the_parsed_event(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            log = temp_path / "haproxy.log"
+            log.write_text(
+                'Nov 18 00:00:00 demo haproxy[1]: 192.0.2.20:1234 '
+                '[18/Nov/2026:00:00:00.123] ft_web bk_app/app1 0/0/1/2/3 200 5120 '
+                '- - ---- 1/1/1/1/0 0/0 {example.com} {} '
+                '"GET http://192.0.2.20/admin HTTP/1.1"\n'
+                'Nov 18 00:00:01 demo haproxy[1]: 192.0.2.21:1234 '
+                '[18/Nov/2026:00:00:01.123] ft_web bk_app/app1 0/0/1/2/3 --- 0 '
+                '- - ---- 1/1/1/1/0 0/0 {} {} "GET /missing HTTP/1.1"\n',
+                encoding="utf-8",
+            )
+            binary = temp_path / "goaccess"
+            binary.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "from pathlib import Path\n"
+                "args = sys.argv[1:]\n"
+                "source = Path(args[0])\n"
+                "output = Path(args[args.index('-o') + 1])\n"
+                "output.write_text(source.read_text(encoding='utf-8'), encoding='utf-8')\n",
+                encoding="utf-8",
+            )
+            binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
+            settings = demo_settings(
+                temp_path,
+                demo=False,
+                log_file=log,
+                mask_internal_ips=True,
+                mask_full=True,
+                goaccess_enabled=True,
+                goaccess_binary=str(binary),
+                goaccess_config=PROJECT_ROOT / "config" / "goaccess-haproxy.conf",
+            )
+            service = SnapshotService(settings)
+            service.refresh_once()
+            html = service.goaccess_html() or ""
+            status = service.snapshot()["meta"]["goaccess"]
+
+        self.assertIn("0.0.0.0:0", html)
+        self.assertIn("ft_web bk_app/- 0/0/0/0/0 200 5120", html)
+        self.assertIn('"GET http://x.x.x.x/admin HTTP/1.1"', html)
+        self.assertNotIn("192.0.2.20", html)
+        self.assertNotIn("1/1/1/1/0", html)
+        self.assertNotIn(" --- ", html)
+        self.assertEqual(status["lines"], 1)
+        self.assertEqual(status["skipped_lines"], 1)
+        self.assertEqual(status["skipped_reasons"]["status"], 1)
 
     def test_internal_ips_in_sni_and_backends_are_masked(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

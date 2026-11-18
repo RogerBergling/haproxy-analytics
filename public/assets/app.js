@@ -559,7 +559,7 @@ function renderGoAccess() {
         ? " Masked internal clients appear as 0.0.0.0 (or ::) because GoAccess requires a valid address."
         : "") +
       (skipped > 0
-        ? ` ${fmt(skipped)} HTTP line(s) were omitted because they do not match the GoAccess log-format.`
+        ? ` ${fmt(skipped)} HTTP event(s) were omitted because they could not be represented in the GoAccess report.`
         : "");
     if (frame.dataset.snapshot !== stamp) {
       frame.dataset.snapshot = stamp;
