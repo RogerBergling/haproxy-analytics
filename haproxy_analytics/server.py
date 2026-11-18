@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from .config import Settings
+from .livestats import LiveStatsService, disabled_payload
 from .logsource import normalize_ip
 from .privacy import mask_ip, should_mask
 from .snapshot import SnapshotService
@@ -86,6 +87,10 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
     @property
     def service(self) -> SnapshotService:
         return self.server.service  # type: ignore[attr-defined]
+
+    @property
+    def live(self) -> LiveStatsService | None:
+        return self.server.live  # type: ignore[attr-defined]
 
     def _common_headers(self, *, csp: str = MAIN_CSP, frame_options: str = "DENY") -> None:
         self.send_header("Content-Security-Policy", csp)
@@ -221,6 +226,12 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
     def _serve_snapshot(self, *, head_only: bool = False) -> None:
         self._send_json(self.service.snapshot(), head_only=head_only)
 
+    def _serve_live(self, *, head_only: bool = False) -> None:
+        if self.live is None:
+            self._send_json(disabled_payload(), head_only=head_only)
+            return
+        self._send_json(self.live.snapshot(), head_only=head_only)
+
     def _serve_whoami(self, *, head_only: bool = False) -> None:
         ip = self._client_ip()
         enabled = self.settings.mask_internal_ips or bool(self.settings.mask_networks)
@@ -243,6 +254,9 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
 
     def _serve_health(self, *, head_only: bool = False) -> None:
         health = self.service.health()
+        health["live"] = (
+            self.live.status() if self.live is not None else {"enabled": False}
+        )
         status = HTTPStatus.OK if health.get("status") == "ok" else HTTPStatus.SERVICE_UNAVAILABLE
         self._send_json(health, status, head_only=head_only)
 
@@ -272,6 +286,8 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
             self._serve_root()
         elif path == "/api/snapshot":
             self._serve_snapshot()
+        elif path == "/api/live":
+            self._serve_live()
         elif path == "/api/whoami":
             self._serve_whoami()
         elif path in ("/healthz", "/api/health"):
@@ -291,6 +307,8 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
             self._serve_root(head_only=True)
         elif path == "/api/snapshot":
             self._serve_snapshot(head_only=True)
+        elif path == "/api/live":
+            self._serve_live(head_only=True)
         elif path == "/api/whoami":
             self._serve_whoami(head_only=True)
         elif path in ("/healthz", "/api/health"):
@@ -331,12 +349,23 @@ class AnalyticsHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, address: tuple[str, int], settings: Settings, service: SnapshotService):
+    def __init__(
+        self,
+        address: tuple[str, int],
+        settings: Settings,
+        service: SnapshotService,
+        live: LiveStatsService | None = None,
+    ):
         self.settings = settings
         self.service = service
+        self.live = live
         self.clear_token = secrets.token_urlsafe(32)
         super().__init__(address, AnalyticsHandler)
 
 
-def create_server(settings: Settings, service: SnapshotService) -> AnalyticsHTTPServer:
-    return AnalyticsHTTPServer((settings.bind, settings.port), settings, service)
+def create_server(
+    settings: Settings,
+    service: SnapshotService,
+    live: LiveStatsService | None = None,
+) -> AnalyticsHTTPServer:
+    return AnalyticsHTTPServer((settings.bind, settings.port), settings, service, live)

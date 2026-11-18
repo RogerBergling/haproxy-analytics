@@ -1,6 +1,7 @@
 const state = {
   snapshot: null,
   version: null,
+  live: null,
   myIp: null,
   whoamiMasked: false,
   maskedIp: null,
@@ -10,10 +11,12 @@ const state = {
   cityFilter: "",
   httpIpFilter: "",
   refreshTimer: null,
+  liveTimer: null,
 };
 
 const VIEW_TITLES = {
   overview: "Overview",
+  live: "Live stats",
   visitors: "Visitors",
   geo: "Geo access",
   tls: "TLS / SNI",
@@ -86,6 +89,19 @@ function formatWhen(value) {
 function formatShare(value) {
   const share = Number(value) || 0;
   return `${share.toFixed(share >= 10 ? 1 : 2)}%`;
+}
+
+function formatSeconds(value) {
+  const total = Math.max(0, Math.floor(Number(value) || 0));
+  if (!total) return "—";
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  if (days) return `${days}d ${hours}h`;
+  if (hours) return `${hours}h ${minutes}m`;
+  if (minutes) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
 }
 
 function countryFlag(code) {
@@ -199,6 +215,276 @@ function renderHttpStats() {
     statCard("Average response", formatBytes(http.avg_bytes || 0), "Bytes per request"),
     statCard("Protocols", fmt((http.protocols || []).length), "Observed HTTP versions")
   );
+}
+
+function liveBadge(status) {
+  const text = String(status || "unknown");
+  const upper = text.toUpperCase();
+  let kind = "info";
+  if (upper === "UP" || upper === "OPEN" || upper.startsWith("UP ")) kind = "ok";
+  else if (upper === "DOWN" || upper.startsWith("DOWN ")) kind = "err";
+  else if (upper.startsWith("MAINT") || upper.startsWith("DRAIN") || upper.startsWith("NOLB")) kind = "warn";
+  return el("span", { className: `badge ${kind}`, text });
+}
+
+function renderLiveSummary(payload) {
+  const container = $("#live-summary");
+  if (!container) return;
+  const info = payload.info || {};
+  const summary = payload.summary || {};
+  clear(container);
+  container.append(
+    statCard("HAProxy", info.version || "—", `Uptime ${info.uptime || "—"}`),
+    statCard(
+      "Current sessions",
+      fmt(summary.current_sessions),
+      `${fmt(summary.session_rate)}/s · max ${fmt(info.max_connections)}`
+    ),
+    statCard(
+      "Requests",
+      fmt(summary.requests_total),
+      `${fmt(summary.request_rate)}/s live rate`
+    ),
+    statCard(
+      "Servers",
+      `${fmt(summary.servers_up)} up`,
+      `${fmt(summary.servers_down)} down · ${fmt(summary.servers_maintenance)} maint · ${fmt(summary.servers_no_check)} no check`
+    ),
+    statCard(
+      "SSL connections",
+      fmt(info.current_ssl_connections),
+      `${fmt(info.ssl_connection_rate)}/s`
+    ),
+    statCard(
+      "Traffic",
+      formatBytes(summary.bytes_out),
+      `in ${formatBytes(summary.bytes_in)} · 5xx ${fmt(summary.http_5xx)}`
+    )
+  );
+}
+
+function renderLiveRuntime(info) {
+  const container = $("#live-runtime");
+  if (!container) return;
+  clear(container);
+  const valueOrDash = (value) => (value === null || value === undefined || value === "-" ? "—" : value);
+  const entries = [
+    ["Version", valueOrDash(info.version)],
+    ["Release date", valueOrDash(info.release_date)],
+    ["Uptime", valueOrDash(info.uptime)],
+    ["Processes / threads", `${fmt(info.processes)} / ${fmt(info.threads)}`],
+    ["Current / max connections", `${fmt(info.current_connections)} / ${fmt(info.max_connections)}`],
+    ["Connection rate", `${fmt(info.connection_rate)}/s`],
+    ["Cumulative connections", fmt(info.cumulative_connections)],
+    ["SSL current / rate", `${fmt(info.current_ssl_connections)} / ${fmt(info.ssl_connection_rate)}/s`],
+    ["Tasks / run queue", `${fmt(info.tasks)} / ${fmt(info.run_queue)}`],
+    ["Idle", info.idle_percent === null || info.idle_percent === undefined ? "—" : `${info.idle_percent}%`],
+    ["Memory pool", `${fmt(info.pool_used_mb)} MB used / ${fmt(info.pool_allocated_mb)} MB allocated`],
+    ["Dropped logs / failed resolutions", `${fmt(info.dropped_logs)} / ${fmt(info.failed_resolutions)}`],
+  ];
+  for (const [label, value] of entries) {
+    container.append(
+      el("div", {
+        className: "live-kv",
+        children: [el("span", { text: label }), el("b", { text: String(value) })],
+      })
+    );
+  }
+}
+
+function liveEmptyRow(body, colspan, text) {
+  body.append(
+    el("tr", {
+      children: [el("td", { className: "muted", attrs: { colspan: String(colspan) }, text })],
+    })
+  );
+}
+
+function renderLiveRows(payload) {
+  const frontends = payload.frontends || [];
+  const backends = payload.backends || [];
+  const servers = payload.servers || [];
+
+  const frontendBody = $("#live-frontends");
+  if (frontendBody) {
+    clear(frontendBody);
+    if (!frontends.length) liveEmptyRow(frontendBody, 8, "No frontend rows returned.");
+    for (const row of frontends) {
+      frontendBody.append(
+        el("tr", {
+          children: [
+            el("td", { className: "mono", text: row.name }),
+            el("td", { children: [liveBadge(row.status)] }),
+            el("td", { className: "number-cell", text: fmt(row.current_sessions) }),
+            el("td", { className: "number-cell", text: fmt(row.session_limit) }),
+            el("td", { className: "number-cell", text: fmt(row.session_rate) }),
+            el("td", { className: "number-cell", text: fmt(row.requests_total) }),
+            el("td", { className: "number-cell", text: `${fmt(row.http_4xx)} / ${fmt(row.http_5xx)}` }),
+            el("td", {
+              className: "number-cell",
+              text: `${formatBytes(row.bytes_in)} / ${formatBytes(row.bytes_out)}`,
+            }),
+          ],
+        })
+      );
+    }
+  }
+
+  const backendBody = $("#live-backends");
+  if (backendBody) {
+    clear(backendBody);
+    if (!backends.length) liveEmptyRow(backendBody, 7, "No backend rows returned.");
+    for (const row of backends) {
+      backendBody.append(
+        el("tr", {
+          children: [
+            el("td", { className: "mono", text: row.name }),
+            el("td", { children: [liveBadge(row.status)] }),
+            el("td", { className: "number-cell", text: fmt(row.current_sessions) }),
+            el("td", { className: "number-cell", text: fmt(row.session_rate) }),
+            el("td", { className: "number-cell", text: fmt(row.requests_total) }),
+            el("td", { className: "number-cell", text: `${fmt(row.http_4xx)} / ${fmt(row.http_5xx)}` }),
+            el("td", {
+              className: "number-cell",
+              text: `${formatBytes(row.bytes_in)} / ${formatBytes(row.bytes_out)}`,
+            }),
+          ],
+        })
+      );
+    }
+  }
+
+  const serverBody = $("#live-servers");
+  if (serverBody) {
+    clear(serverBody);
+    if (!servers.length) liveEmptyRow(serverBody, 8, "No server rows returned.");
+    for (const row of servers) {
+      let check = row.check_status && row.check_status !== "-" ? row.check_status : "—";
+      if (row.check_health !== null && row.check_health !== undefined) {
+        check = `${check} · ${fmt(row.check_health)}`;
+      }
+      serverBody.append(
+        el("tr", {
+          children: [
+            el("td", {
+              children: [
+                el("span", { className: "mono", text: row.backend }),
+                el("span", { className: "muted", text: " / " }),
+                el("span", { className: "mono", text: row.name }),
+              ],
+            }),
+            el("td", { children: [liveBadge(row.status)] }),
+            el("td", { className: "mono", text: check }),
+            el("td", { className: "number-cell", text: fmt(row.current_sessions) }),
+            el("td", { className: "number-cell", text: fmt(row.session_rate) }),
+            el("td", { className: "number-cell", text: fmt(row.http_5xx) }),
+            el("td", {
+              className: "number-cell",
+              text: `${formatBytes(row.bytes_in)} / ${formatBytes(row.bytes_out)}`,
+            }),
+            el("td", { className: "number-cell", text: formatSeconds(row.last_change_seconds) }),
+          ],
+        })
+      );
+    }
+  }
+}
+
+function renderLive() {
+  const payload = state.live;
+  const nav = $("#nav-live-status");
+  const pill = $("#live-pill");
+  const note = $("#live-status-note");
+  const empty = $("#live-empty");
+  const emptyBody = $("#live-empty-body");
+  const content = $("#live-content");
+  if (!payload || !payload.meta) {
+    if (nav) nav.textContent = "…";
+    if (pill) pill.textContent = "Live —";
+    show(note, false);
+    show(content, false);
+    show(empty, true);
+    if (emptyBody) {
+      clear(emptyBody);
+      emptyBody.append(emptyState("Loading live stats…", "Waiting for the first runtime response."));
+    }
+    return;
+  }
+
+  const meta = payload.meta;
+  if (!meta.enabled) {
+    if (nav) nav.textContent = "off";
+    if (pill) pill.textContent = "Disabled";
+    show(note, false);
+    show(content, false);
+    show(empty, true);
+    if (emptyBody) {
+      clear(emptyBody);
+      emptyBody.append(
+        emptyState(
+          "Live stats are not configured",
+          "Set HAPROXY_STATS_SOCKET to the read-only HAProxy stats socket host:port, then restart the container."
+        )
+      );
+    }
+    return;
+  }
+
+  show(empty, false);
+  show(content, true);
+  if (nav) nav.textContent = meta.connected ? "live" : "offline";
+  if (pill) pill.textContent = `Live · ${fmt(meta.refresh_seconds || 5)}s`;
+  if (!meta.connected) {
+    if (note) {
+      note.className = "live-note warn";
+      note.textContent = meta.last_error
+        ? `Live stats disconnected: ${meta.last_error}`
+        : "Waiting for the first live stats poll.";
+    }
+    show(note, true);
+  } else {
+    show(note, false);
+  }
+  renderLiveSummary(payload);
+  renderLiveRuntime(payload.info || {});
+  renderLiveRows(payload);
+}
+
+async function refreshLive(silent = false) {
+  try {
+    state.live = await fetchJSON("/api/live");
+    renderLive();
+  } catch (error) {
+    if (state.live && state.live.meta) {
+      state.live = {
+        ...state.live,
+        meta: {
+          ...state.live.meta,
+          connected: false,
+          last_error: error.message,
+        },
+      };
+      renderLive();
+    }
+    if (!silent) showAlert(`Could not load live stats: ${error.message}`);
+  }
+}
+
+function scheduleLiveRefresh() {
+  if (state.liveTimer) {
+    clearTimeout(state.liveTimer);
+    state.liveTimer = null;
+  }
+  const meta = state.live && state.live.meta ? state.live.meta : null;
+  if (!meta || !meta.enabled) return;
+  if (state.view !== "live" || document.visibilityState === "hidden") return;
+  const seconds = Math.max(2, Number(meta.refresh_seconds) || 5);
+  state.liveTimer = setTimeout(async () => {
+    if (state.view === "live" && document.visibilityState === "visible") {
+      await refreshLive(true);
+    }
+    scheduleLiveRefresh();
+  }, seconds * 1000);
 }
 
 function renderGeoSummary() {
@@ -938,6 +1224,13 @@ function showView(name) {
   }
   if (view === "visitors") renderVisitors();
   if (view === "geo") renderGeo();
+  if (view === "live") {
+    renderLive();
+    refreshLive(true).finally(scheduleLiveRefresh);
+  } else if (state.liveTimer) {
+    clearTimeout(state.liveTimer);
+    state.liveTimer = null;
+  }
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -1103,13 +1396,16 @@ async function refreshSnapshot(silent = false) {
 
 async function initialLoad() {
   try {
-    const [snapshot, version] = await Promise.all([
+    const [snapshot, version, live] = await Promise.all([
       fetchJSON("/api/snapshot"),
       fetchJSON("/version.json").catch(() => null),
+      fetchJSON("/api/live").catch(() => null),
     ]);
     state.snapshot = snapshot;
     state.version = version;
+    state.live = live;
     renderAll();
+    renderLive();
     scheduleRefresh();
     await loadWhoami();
   } catch (error) {
@@ -1124,12 +1420,22 @@ function setupRefresh() {
       button.disabled = true;
       button.textContent = "Refreshing…";
       await refreshSnapshot(false);
+      if (state.view === "live") {
+        await refreshLive(false);
+        scheduleLiveRefresh();
+      }
       button.disabled = false;
       button.textContent = "Refresh";
     });
   }
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") refreshSnapshot(true);
+    if (document.visibilityState === "visible") {
+      refreshSnapshot(true);
+      if (state.view === "live") refreshLive(true).finally(scheduleLiveRefresh);
+    } else if (state.liveTimer) {
+      clearTimeout(state.liveTimer);
+      state.liveTimer = null;
+    }
   });
 }
 

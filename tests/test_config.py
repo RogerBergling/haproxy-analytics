@@ -151,6 +151,66 @@ class ConfigTests(unittest.TestCase):
             settings = Settings.from_env()
         self.assertTrue(settings.demo)
 
+    def test_stats_socket_defaults_disabled(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            settings = Settings.from_env()
+        self.assertIsNone(settings.stats_socket)
+        self.assertIsNone(settings.stats_host)
+        self.assertIsNone(settings.stats_port)
+        self.assertEqual(settings.stats_refresh_seconds, 5)
+        self.assertEqual(settings.stats_timeout_seconds, 2)
+        self.assertEqual(settings.stats_max_rows, 500)
+        self.assertGreaterEqual(settings.stats_max_bytes, 65536)
+
+    def test_stats_socket_ipv4(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "HAPROXY_STATS_SOCKET": "192.0.2.20:8404",
+                "STATS_REFRESH_SECONDS": "10",
+                "STATS_TIMEOUT_SECONDS": "3",
+                "STATS_MAX_BYTES": "131072",
+                "STATS_MAX_ROWS": "25",
+            },
+            clear=True,
+        ):
+            settings = Settings.from_env()
+        self.assertEqual(settings.stats_host, "192.0.2.20")
+        self.assertEqual(settings.stats_port, 8404)
+        self.assertEqual(settings.stats_refresh_seconds, 10)
+        self.assertEqual(settings.stats_timeout_seconds, 3)
+        self.assertEqual(settings.stats_max_bytes, 131072)
+        self.assertEqual(settings.stats_max_rows, 25)
+
+    def test_stats_socket_ipv6(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"HAPROXY_STATS_SOCKET": "[2001:db8::20]:8404"},
+            clear=True,
+        ):
+            settings = Settings.from_env()
+        self.assertEqual(settings.stats_host, "2001:db8::20")
+        self.assertEqual(settings.stats_port, 8404)
+
+    def test_invalid_stats_socket(self) -> None:
+        for value in (
+            "not-a-socket",
+            ":8404",
+            "192.0.2.20:0",
+            "192.0.2.20:70000",
+            "192.0.2.20:8404:extra",
+            "0.0.0.0:8404",
+            "[::]:8404",
+        ):
+            with self.subTest(value=value):
+                with patch.dict(
+                    os.environ,
+                    {"HAPROXY_STATS_SOCKET": value},
+                    clear=True,
+                ):
+                    with self.assertRaises(ConfigError):
+                        Settings.from_env()
+
     def test_invalid_port(self) -> None:
         with patch.dict(os.environ, {"APP_PORT": "0"}, clear=True):
             with self.assertRaises(ConfigError):

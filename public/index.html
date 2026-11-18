@@ -40,6 +40,11 @@
         <span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 13h6V4H4v9zm10 7h6v-9h-6v9zM4 20h6v-3H4v3zm10-13h6V4h-6v3z" stroke="currentColor" stroke-width="1.6"/></svg></span>
         Overview
       </button>
+      <button class="nav-item" data-view="live" type="button">
+        <span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2.2-6 4.1 13 2.3-7H21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        Live stats
+        <span class="nav-badge" id="nav-live-status">off</span>
+      </button>
       <button class="nav-item" data-view="visitors" type="button">
         <span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.2" stroke="currentColor" stroke-width="1.6"/><path d="M5 20c.7-3.4 3.3-5 7-5s6.3 1.6 7 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
         Visitors
@@ -157,6 +162,68 @@
           </table>
         </div>
       </section>
+    </section>
+
+    <section class="view hidden" id="view-live" data-view-panel="live">
+      <div class="page-head">
+        <div>
+          <div class="page-title">Live stats</div>
+          <div class="page-sub">Read-only HAProxy runtime API. Counters are polled from a separate stats socket; this view never changes HAProxy state.</div>
+        </div>
+        <div class="head-actions"><span class="pill" id="live-pill">Live —</span></div>
+      </div>
+
+      <div class="live-note hidden" id="live-status-note" role="status"></div>
+      <div class="card hidden" id="live-empty"><div class="card-body" id="live-empty-body"></div></div>
+
+      <div class="live-content hidden" id="live-content">
+        <div class="stats" id="live-summary"></div>
+
+        <section class="card">
+          <div class="card-head">
+            <div><div class="card-title">Runtime</div><div class="card-sub">Process, connection and memory counters from <code>show info</code></div></div>
+            <span class="badge info">Read-only</span>
+          </div>
+          <div class="card-body"><div class="live-runtime" id="live-runtime"></div></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div><div class="card-title">Frontends</div><div class="card-sub">Live frontend counters and status</div></div>
+          </div>
+          <div class="table-wrap table-scroll">
+            <table class="data-table">
+              <thead><tr><th>Frontend</th><th>Status</th><th class="number-cell">Sessions</th><th class="number-cell">Limit</th><th class="number-cell">Rate/s</th><th class="number-cell">Requests</th><th class="number-cell">4xx / 5xx</th><th class="number-cell">Bytes in / out</th></tr></thead>
+              <tbody id="live-frontends"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div><div class="card-title">Backends</div><div class="card-sub">Live backend counters and status</div></div>
+          </div>
+          <div class="table-wrap table-scroll">
+            <table class="data-table">
+              <thead><tr><th>Backend</th><th>Status</th><th class="number-cell">Sessions</th><th class="number-cell">Rate/s</th><th class="number-cell">Requests</th><th class="number-cell">4xx / 5xx</th><th class="number-cell">Bytes in / out</th></tr></thead>
+              <tbody id="live-backends"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div><div class="card-title">Servers</div><div class="card-sub">Health and counters by backend server. Internal server addresses are intentionally omitted.</div></div>
+            <span class="badge info">No addresses</span>
+          </div>
+          <div class="table-wrap table-scroll">
+            <table class="data-table">
+              <thead><tr><th>Backend / server</th><th>Status</th><th>Check</th><th class="number-cell">Sessions</th><th class="number-cell">Rate/s</th><th class="number-cell">5xx</th><th class="number-cell">Bytes in / out</th><th class="number-cell">Last change</th></tr></thead>
+              <tbody id="live-servers"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
     </section>
 
     <section class="view hidden" id="view-visitors" data-view-panel="visitors">

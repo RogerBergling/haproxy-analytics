@@ -25,6 +25,8 @@ The main assets are:
 - the client IP addresses, SNI hostnames, requested paths and timestamps in the
   dashboard;
 - the HAProxy log itself;
+- live HAProxy runtime counters, backend names and health state;
+- the stats socket endpoint and the network path to it;
 - any MaxMind credentials used by the optional updater;
 - TLS keys and certificates used by HAProxy or the optional syslog receiver.
 
@@ -36,6 +38,7 @@ The main assets are:
 - It does not call an external GeoIP service, map tile server, CDN, font server,
   analytics service or telemetry endpoint.
 - It does not write to the log source.
+- It does not send HAProxy runtime-control commands. Live stats are read-only.
 - It does not store a database. The optional persistent syslog store writes only to the dedicated `/data` volume.
 - It does not decrypt TLS passthrough traffic.
 
@@ -96,7 +99,31 @@ the receiver can inject fake events. Mitigations:
 The receiver enforces a maximum message size and a bounded ring buffer, but it
 cannot make an untrusted sender trustworthy.
 
-### 5. Keep rendering textual and same-origin
+### 5. Protect the live stats socket
+
+The optional Live stats view uses a separate HAProxy runtime socket. This socket
+is a control-plane interface:
+
+- HAProxy's stats protocol has no TLS and no authentication;
+- `level user` is the least-privileged level, but the network path is still the
+  real access control;
+- `operator` and `admin` sockets can change runtime state and must not be used
+  by this app;
+- the app only sends `show info;show stat`, but anyone who can reach the socket
+  may send commands allowed by its level.
+
+Required controls:
+
+- bind to a specific private interface address, never `0.0.0.0`;
+- firewall the port to the analytics host only;
+- never publish it through HAProxy, a router or a port forward;
+- use an SSH tunnel or an mTLS read-only agent if the path crosses an untrusted
+  network;
+- keep `STATS_TIMEOUT_SECONDS` and `STATS_MAX_BYTES` small;
+- do not expose `show sess`, `show errors` or stick-table data in the UI;
+- keep the dashboard behind the authenticated HAProxy frontend.
+
+### 6. Keep rendering textual and same-origin
 
 The dashboard has no embedded report iframe, no third-party chart library and no
 external script. HTTP analytics are rendered from the in-memory snapshot with
@@ -120,7 +147,7 @@ form-action 'none'
 Do not add a third-party report iframe, chart CDN, map tile service or remote
 font. Keep `connect-src` limited to `'self'`.
 
-### 6. Harden the container
+### 7. Harden the container
 
 The supplied Compose file uses:
 
@@ -135,7 +162,7 @@ The supplied Compose file uses:
 Do not add the Docker socket, host networking or extra capabilities unless you
 understand the exposure.
 
-### 7. Manage secrets outside the repository
+### 8. Manage secrets outside the repository
 
 Never commit:
 
@@ -308,6 +335,9 @@ Operator controls:
 - The app cannot validate the accuracy of MaxMind data.
 - The app cannot enforce HAProxy authentication if the published dashboard port is exposed
   directly.
+- The app cannot add TLS or authentication to HAProxy's stats protocol. The
+  operator must isolate the stats socket with binding, firewall rules or a
+  tunnel.
 - The self-highlight is an IP comparison, not proof of identity. NAT and proxies
   make one IP represent multiple people.
 

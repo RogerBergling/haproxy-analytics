@@ -7,6 +7,7 @@ missing hardening, unsafe frontend patterns and packaging drift before CI.
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -30,6 +31,7 @@ REQUIRED = [
     "haproxy_analytics/server.py",
     "haproxy_analytics/parser.py",
     "haproxy_analytics/snapshot.py",
+    "haproxy_analytics/livestats.py",
     "haproxy_analytics/syslog_store.py",
     "public/index.html",
     "public/assets/app.css",
@@ -38,6 +40,7 @@ REQUIRED = [
     "public/assets/world-light.svg",
     "examples/demo-haproxy.log",
     "tests/test_parser.py",
+    "tests/test_livestats.py",
     "tests/test_server.py",
     "docs/haproxy.md",
     "docs/external-logs.md",
@@ -152,6 +155,14 @@ def main() -> int:
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     if f'version = "{version_file}"' not in pyproject:
         fail("VERSION and pyproject.toml disagree", errors)
+    try:
+        public_version = json.loads(
+            (ROOT / "public/version.json").read_text(encoding="utf-8")
+        ).get("version")
+    except (OSError, ValueError):
+        public_version = None
+    if public_version != version_file:
+        fail("VERSION and public/version.json disagree", errors)
 
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     for token in ("USER ", "HEALTHCHECK", "WORKDIR", "PYTHONDONTWRITEBYTECODE"):
@@ -194,6 +205,8 @@ def main() -> int:
     env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
     if "YOUR_MAXMIND_ACCOUNT_ID" not in env_example and "GEOIP_ACCOUNT_ID" not in env_example:
         fail(".env.example does not document the optional GeoIP account variables", errors)
+    if "HAPROXY_STATS_SOCKET" not in env_example:
+        fail(".env.example does not document HAPROXY_STATS_SOCKET", errors)
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     for token in ("docker compose", "ghcr.io/rogerbergling/haproxy-analytics", "docs/security.md", "docs/haproxy.md"):

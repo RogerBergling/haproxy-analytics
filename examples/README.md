@@ -5,9 +5,9 @@ Everything in this directory is synthetic or generic:
 - `demo-haproxy.log` uses `example.com`, `example.net`, `example.org`,
   documentation IP ranges and well-known public resolver addresses. It contains
   no customer, tenant or private infrastructure data.
-- `haproxy/` contains fragments for TLS termination, SNI passthrough and an
-  authenticated dashboard frontend. They use `example.com`, documentation
-  addresses and placeholder certificate paths.
+- `haproxy/` contains fragments for TLS termination, SNI passthrough, an
+  authenticated dashboard frontend and a read-only live stats socket. They use
+  `example.com`, documentation addresses and placeholder certificate paths.
 - `rsyslog/` contains forwarding and receiving patterns. They use
   `example.com` and placeholder certificate paths.
 

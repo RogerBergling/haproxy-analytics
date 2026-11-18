@@ -17,12 +17,12 @@ from haproxy_analytics.syslog_store import SyslogStore
 from tests.support import demo_settings
 
 @contextmanager
-def running_server(settings, service=None):
+def running_server(settings, service=None, live=None):
     settings = settings.with_overrides(port=0)
     if service is None:
         service = SnapshotService(settings)
         service.refresh_once()
-    server = create_server(settings, service)
+    server = create_server(settings, service, live)
     thread = threading.Thread(target=server.serve_forever, name="test-http", daemon=True)
     thread.start()
     try:
@@ -67,6 +67,52 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(payload["kpis"]["http_total"], 20)
             self.assertEqual(payload["kpis"]["tls_total"], 12)
             self.assertTrue(payload["meta"]["demo"])
+
+    def test_live_api_is_disabled_without_stats_socket(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, running_server(demo_settings(Path(temp))) as (port, _service):
+            status, headers, body = request(port, "GET", "/api/live")
+            self.assertEqual(status, 200)
+            self.assertEqual(headers["content-type"], "application/json; charset=utf-8")
+            payload = json.loads(body)
+            self.assertFalse(payload["meta"]["enabled"])
+            self.assertEqual(payload["frontends"], [])
+            self.assertEqual(payload["servers"], [])
+
+    def test_live_api_and_health_include_configured_service(self) -> None:
+        class FakeLive:
+            def snapshot(self):
+                return {
+                    "meta": {
+                        "enabled": True,
+                        "connected": True,
+                        "read_only": True,
+                        "refresh_seconds": 5,
+                    },
+                    "info": {"version": "3.0.30"},
+                    "summary": {"servers_up": 1},
+                    "frontends": [],
+                    "backends": [],
+                    "servers": [],
+                }
+
+            def status(self):
+                return {
+                    "enabled": True,
+                    "connected": True,
+                    "last_error": None,
+                    "consecutive_errors": 0,
+                }
+
+        with tempfile.TemporaryDirectory() as temp:
+            settings = demo_settings(Path(temp))
+            with running_server(settings, live=FakeLive()) as (port, _service):
+                status, _headers, body = request(port, "GET", "/api/live")
+                self.assertEqual(status, 200)
+                self.assertEqual(json.loads(body)["info"]["version"], "3.0.30")
+
+                status, _headers, body = request(port, "GET", "/healthz")
+                self.assertEqual(status, 200)
+                self.assertTrue(json.loads(body)["live"]["connected"])
 
     def test_whoami_without_trusted_proxy(self) -> None:
         with tempfile.TemporaryDirectory() as temp, running_server(demo_settings(Path(temp))) as (port, _service):

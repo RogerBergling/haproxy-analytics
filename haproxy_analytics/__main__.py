@@ -9,6 +9,7 @@ import signal
 import sys
 
 from .config import ConfigError, Settings
+from .livestats import LiveStatsService
 from .logsource import SyslogBuffer, SyslogServer
 from .syslog_store import SyslogStore
 from .server import create_server
@@ -30,6 +31,20 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--geoip-city", help="GeoLite2 City MMDB path")
     parser.add_argument("--geoip-asn", help="GeoLite2 ASN MMDB path")
     parser.add_argument("--syslog-listen", help="Syslog listen address, for example 0.0.0.0:5514")
+    parser.add_argument(
+        "--stats-socket",
+        help="Read-only HAProxy stats socket host:port (environment: HAPROXY_STATS_SOCKET)",
+    )
+    parser.add_argument(
+        "--stats-refresh",
+        type=int,
+        help="Live stats refresh interval in seconds (environment: STATS_REFRESH_SECONDS)",
+    )
+    parser.add_argument(
+        "--stats-timeout",
+        type=int,
+        help="Live stats socket timeout in seconds (environment: STATS_TIMEOUT_SECONDS)",
+    )
     parser.add_argument("--demo", action="store_true", help="Use the bundled synthetic demo log")
     parser.add_argument("--log-level", help="Logging level (DEBUG, INFO, WARNING, ERROR)")
     parser.add_argument("--version", action="store_true", help="Print version and exit")
@@ -45,6 +60,9 @@ def _apply_cli_overrides(args: argparse.Namespace) -> None:
         "geoip_city": "GEOIP_CITY_DB",
         "geoip_asn": "GEOIP_ASN_DB",
         "syslog_listen": "SYSLOG_LISTEN",
+        "stats_socket": "HAPROXY_STATS_SOCKET",
+        "stats_refresh": "STATS_REFRESH_SECONDS",
+        "stats_timeout": "STATS_TIMEOUT_SECONDS",
         "log_level": "LOG_LEVEL",
     }
     for attribute, environment in mapping.items():
@@ -114,11 +132,18 @@ def main(argv: list[str] | None = None) -> int:
     service = SnapshotService(settings, syslog_server)
     service.start()
 
+    live_service: LiveStatsService | None = None
+    if settings.stats_socket:
+        live_service = LiveStatsService(settings)
+        live_service.start()
+
     try:
-        server = create_server(settings, service)
+        server = create_server(settings, service, live_service)
     except OSError as exc:
         LOGGER.error("Could not start the dashboard server on %s:%s: %s", settings.bind, settings.port, exc)
         service.stop()
+        if live_service:
+            live_service.stop()
         if syslog_server:
             syslog_server.stop()
         return 1
@@ -128,6 +153,12 @@ def main(argv: list[str] | None = None) -> int:
         f"(refresh every {settings.refresh_seconds}s)",
         flush=True,
     )
+    if settings.stats_socket:
+        print(
+            f"Live stats: {settings.stats_socket} (read-only, every "
+            f"{settings.stats_refresh_seconds}s)",
+            flush=True,
+        )
     if settings.demo:
         print("Demo mode is active. All values come from the bundled synthetic log.", flush=True)
 
@@ -140,6 +171,8 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         server.server_close()
         service.stop()
+        if live_service:
+            live_service.stop()
         if syslog_server:
             syslog_server.stop()
     return 0

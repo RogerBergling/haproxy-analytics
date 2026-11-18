@@ -9,6 +9,7 @@ haproxy_analytics/
 ├── aggregate.py         counters, per-IP details, map points
 ├── config.py            environment and CLI configuration
 ├── geoip.py             optional MaxMind lookup
+├── livestats.py         read-only HAProxy runtime API client and cache
 ├── logsource.py         file tail, syslog buffer/receiver
 ├── parser.py            HTTP, SNI and repeated-message parser
 ├── server.py            HTTP routes, security headers, whoami
@@ -35,6 +36,7 @@ examples/
 tests/
 ├── support.py
 ├── test_config.py
+├── test_livestats.py
 ├── test_logsource.py
 ├── test_parser.py
 ├── test_server.py
@@ -68,7 +70,8 @@ python3 -m haproxy_analytics \
   --port 8080 \
   --log ./logs/haproxy.log \
   --geoip-city ./geoip/GeoLite2-City.mmdb \
-  --geoip-asn ./geoip/GeoLite2-ASN.mmdb
+  --geoip-asn ./geoip/GeoLite2-ASN.mmdb \
+  --stats-socket 192.0.2.20:8404
 ```
 
 CLI flags override the matching environment variables. Use `--help` for the
@@ -98,6 +101,8 @@ The test suite covers:
 - file-tail truncation without partial lines;
 - bounded syslog buffers;
 - UDP/TCP receiver allowlists, size limits and TCP TLS;
+- live stats parsing, response-size limits, row caps, failure fallback and
+  omission of server addresses;
 - HTTP detail counters, protocol/status classes, request rows and per-IP row caps;
 - internal IP masking, masked visitor grouping and capped individual request rows;
 - persistent syslog store append, rotation, clear and API token checks;
@@ -116,6 +121,8 @@ API, assets, CSP, method rejection and traversal rejection.
 - Keep `connect-src` limited to `'self'`. Do not add a map tile service, a
   third-party IP lookup or remote fonts.
 - Do not add a third-party report iframe, chart CDN or external script. Render data from the snapshot with DOM APIs.
+- Keep the Live stats view read-only. Do not add UI or API paths that send HAProxy runtime-control commands.
+- Do not include backend server addresses in the live payload or UI.
 - Use the shared design tokens in `app.css`; keep dark and light themes usable.
 - Status must have a text label in addition to color.
 - Preserve keyboard focus, skip link, table semantics and reduced-motion
@@ -144,7 +151,7 @@ When adding a format:
 
 ## Versioning and release
 
-- The version lives in `VERSION` and `haproxy_analytics/__init__.py`.
+- The version lives in `VERSION`, `haproxy_analytics/__init__.py`, `pyproject.toml` and `public/version.json`; keep them in sync.
 - The Docker build receives `APP_VERSION`, `IMAGE_TAG`, `GIT_SHA`,
   `BUILD_DATE` and `BUILD_NUMBER`.
 - `docker-publish.yml` publishes `linux/amd64` and `linux/arm64` images to

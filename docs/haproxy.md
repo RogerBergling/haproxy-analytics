@@ -226,7 +226,63 @@ The app can also receive syslog directly. That mode is opt-in and should be
 restricted to a trusted sender network. See
 [external-logs.md](external-logs.md#direct-syslog-receiver).
 
-## 5. Validate and reload
+## 5. Read-only live stats socket
+
+The **Live stats** view is optional. It polls a dedicated HAProxy runtime socket
+and displays global, frontend, backend and server counters. It never sends
+runtime-control commands and does not list internal server addresses.
+
+Do not reuse the admin socket for this app. Add a separate socket with the
+least-privileged `user` level:
+
+```haproxy
+global
+    # Keep the existing administration socket exactly as it is.
+    stats socket /run/haproxy/admin.sock mode 660 level admin
+
+    # Dedicated read-only socket for HAProxy Analytics.
+    # Replace 192.0.2.20 with one private interface address, not 0.0.0.0.
+    stats socket ipv4@192.0.2.20:8404 level user
+    stats timeout 30s
+```
+
+Then set the endpoint on the analytics host:
+
+```dotenv
+HAPROXY_STATS_SOCKET=192.0.2.20:8404
+STATS_REFRESH_SECONDS=5
+STATS_TIMEOUT_SECONDS=2
+STATS_MAX_BYTES=4194304
+STATS_MAX_ROWS=500
+```
+
+Security requirements:
+
+- Bind to a specific private interface address, not `0.0.0.0`.
+- Firewall the port so only the analytics host can reach it.
+- Never publish the stats socket through HAProxy, a router or a port forward.
+- HAProxy's stats protocol has no TLS or authentication of its own. If the
+  traffic crosses a network you do not fully trust, use an SSH tunnel or a
+  read-only mTLS agent instead of a direct TCP socket.
+- Keep `level user`; `operator` and `admin` allow state-changing commands.
+- The app only sends `show info;show stat`. The browser cannot send commands.
+
+Validate and test from the analytics host:
+
+```bash
+sudo haproxy -c -f /etc/haproxy/haproxy.cfg
+sudo systemctl reload haproxy
+
+# Must succeed from the analytics host and fail from other hosts.
+printf 'show info\n' | socat - TCP:192.0.2.20:8404 | head
+printf 'show stat\n' | socat - TCP:192.0.2.20:8404 | head -n 3
+```
+
+If the socket does not rebind after a reload, verify the HAProxy service's
+reload method and choose a different port or a tunnel. The app reconnects
+automatically on the next poll.
+
+## 6. Validate and reload
 
 Always validate before reloading:
 
@@ -245,7 +301,7 @@ sudo grep 'src=' /var/log/haproxy.log | tail -n 3
 If you use a remote log target, check the central receiver and the app's
 snapshot warnings instead.
 
-## 6. Common mistakes
+## 7. Common mistakes
 
 | Problem | Cause | Fix |
 | --- | --- | --- |
@@ -254,11 +310,13 @@ snapshot warnings instead.
 | No HTTP requests in the app | Frontend is `mode tcp`, or `option httplog` is missing | Use HTTP mode and `option httplog` on the terminating frontend. |
 | HTTP details are empty | Frontend is `mode tcp`, or `option httplog` is missing | Use HTTP mode and `option httplog` on the terminating frontend. |
 | Viewer IP is always the proxy | `X-Forwarded-For` is not sent or the peer is not trusted | Add `option forwardfor` and set `TRUSTED_PROXIES`. |
+| Live stats show `offline` | Wrong host/port, firewall, HAProxy not reloaded or socket not bound | Test with `socat` from the analytics host; check the stats socket line and firewall. |
+| Live stats are empty/disabled | `HAPROXY_STATS_SOCKET` is empty or invalid | Set the private `host:port` in `.env`, recreate the container and check `/api/live`. |
 | TLS passthrough shows no URLs | Traffic is encrypted end to end | Expected. Only SNI metadata is visible. |
 | 503 from the dashboard backend | App not running or wrong port | Check `docker compose ps` and `curl http://127.0.0.1:8009/healthz`. |
 | Auth loop or 401 | Wrong userlist/hash, or auth applied to health checks | Check the HAProxy logs; exclude health checks if needed. |
 
-## 7. Minimal examples
+## 8. Minimal examples
 
 Ready-to-adapt files:
 

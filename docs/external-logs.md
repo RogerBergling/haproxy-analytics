@@ -4,6 +4,11 @@ The application can run on the HAProxy host or on a separate analytics host.
 This page compares the supported patterns and shows a safe syslog forwarding
 setup. All addresses are documentation placeholders.
 
+Live stats are separate from log shipping: they use a dedicated read-only
+HAProxy stats socket, not the log path. See
+[haproxy.md](haproxy.md#5-read-only-live-stats-socket) for the remote socket
+requirements and firewall controls.
+
 ## Choose a pattern
 
 | Pattern | Best for | History after restart | Security notes |

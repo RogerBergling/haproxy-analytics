@@ -29,12 +29,15 @@ HAProxy Analytics is designed to sit **behind** a trusted HAProxy instance:
 - HAProxy must terminate TLS and require authentication before proxying to the
   app;
 - the app port must not be exposed directly to an untrusted network;
+- the optional HAProxy stats socket must be a dedicated read-only socket at
+  `level user`, bound to a private interface and firewalled to the analytics
+  host;
 - the host, container runtime, HAProxy and MaxMind databases must be patched
   and maintained by the operator.
 
 The dashboard contains client IP addresses, SNI hostnames, requested paths,
-status codes and timestamps. Treat it, its screenshots, exports and browser
-history as sensitive data.
+status codes, timestamps, live HAProxy backend names and health state. Treat
+it, its screenshots, exports and browser history as sensitive data.
 
 ## Security properties
 
@@ -49,6 +52,8 @@ history as sensitive data.
   bounded buffers and optional TCP TLS with optional client certificates.
 - HTTP analytics are rendered natively; the app embeds no third-party report,
   chart library or external script.
+- The optional Live stats view connects only to an operator-configured stats
+  socket, sends only `show info;show stat`, and omits internal server addresses.
 - The container runs as a non-root user with a read-only root filesystem, all
   Linux capabilities dropped and `no-new-privileges`.
 - CI runs unit tests, repository verification, an HTTP smoke test, a secret
@@ -60,7 +65,8 @@ history as sensitive data.
 - The content of HAProxy logs. Logs can contain personal data and secrets in
   URLs; the operator is responsible for retention and access.
 - Compromise of the browser, the device, the container runtime or the host.
-- Misconfigured HAProxy TLS, authentication, ACLs or firewall rules.
+- Misconfigured HAProxy TLS, authentication, ACLs, stats socket exposure or
+  firewall rules.
 - Forwarding untrusted `X-Forwarded-For` headers. Only configure
   `TRUSTED_PROXIES` for proxies you control.
 
@@ -73,7 +79,9 @@ history as sensitive data.
 4. Keep `SYSLOG_ALLOWED_NETWORKS` as narrow as possible.
 5. Use syslog TLS with client certificates when the receiver crosses an
    untrusted network.
-6. Do not commit logs, `.env`, GeoIP databases, certificates or real HAProxy
+6. Keep the live stats socket at `level user`, bound to a private interface,
+   and firewalled to the analytics host only.
+7. Do not commit logs, `.env`, GeoIP databases, certificates or real HAProxy
    configurations.
-7. Review the dashboard access logs and retention policy with the same care as
+8. Review the dashboard access logs and retention policy with the same care as
    the HAProxy logs themselves.

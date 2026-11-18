@@ -14,6 +14,7 @@ docker compose logs --tail=100 haproxy-analytics
 curl -fsS http://127.0.0.1:8009/healthz
 curl -fsS http://127.0.0.1:8009/version.json
 curl -fsS http://127.0.0.1:8009/api/whoami
+curl -fsS http://127.0.0.1:8009/api/live
 ```
 
 `/healthz` returns 200 after the first successful snapshot. Warnings about a
@@ -29,6 +30,36 @@ A failed snapshot build returns 503 and keeps the last good snapshot visible.
   `/healthz`.
 - Refreshing a very large log is bounded by `MAX_LOG_BYTES`, but still costs CPU.
   Increase the interval or reduce the tail window on small hosts.
+
+## Live stats
+
+Live stats are independent of the log snapshot:
+
+- enable them with `HAPROXY_STATS_SOCKET=host:port`;
+- the app connects to a dedicated HAProxy stats socket at `level user` and sends
+  only `show info;show stat`;
+- the poll interval is `STATS_REFRESH_SECONDS` (default 5);
+- the browser polls `/api/live` only while the Live view is active and visible;
+- the last good payload is kept when a poll fails; `meta.connected` and
+  `meta.last_error` show the current state;
+- `STATS_MAX_BYTES` and `STATS_MAX_ROWS` bound the response and tables;
+- internal server addresses and ports are omitted from the payload.
+
+The stats protocol has no TLS or authentication. Keep the socket on a private
+interface, firewall it to the analytics host and never expose it through
+HAProxy. See [haproxy.md](haproxy.md#5-read-only-live-stats-socket).
+
+Check connectivity from the analytics host:
+
+```bash
+printf 'show info\n' | socat - TCP:192.0.2.20:8404 | head
+printf 'show stat\n' | socat - TCP:192.0.2.20:8404 | head -n 3
+curl -fsS http://127.0.0.1:8009/api/live
+```
+
+If `meta.connected` is false, check the endpoint, firewall, HAProxy stats socket
+bind and the HAProxy reload. The app reconnects on the next interval and does
+not require a restart after a transient failure.
 
 ## Parser formats
 
@@ -195,10 +226,15 @@ current file. This is expected for a current-file reader.
 | `MAX_REQUEST_ROWS` | Newest individual HTTP requests retained for the Requests view/API. |
 | `SYSLOG_BUFFER_LINES` | In-memory syslog history. |
 | `SYSLOG_MAX_MESSAGE_BYTES` | Per-message cap. |
+| `STATS_REFRESH_SECONDS` | How often the live stats socket is polled. |
+| `STATS_MAX_BYTES` | Maximum runtime API response. |
+| `STATS_MAX_ROWS` | Maximum live table rows per category. |
 
 The app keeps counters and per-IP details in memory, not raw lines. A very large
 unique-IP or unique-path set still costs memory. Monitor the container and raise
-`REFRESH_SECONDS` before increasing every limit.
+`REFRESH_SECONDS` before increasing every limit. Live stats add one small
+outbound connection per poll; `STATS_MAX_BYTES` and `STATS_MAX_ROWS` keep the
+payload bounded even if HAProxy has many proxies or servers.
 
 ## Storage and disk usage
 
@@ -294,6 +330,14 @@ docker stats haproxy-analytics
 The app does not log request paths or client addresses by default. Container
 logs contain startup/configuration messages and operational errors.
 
+Live stats connection state is in `/api/live` and in the `live` block of
+`/healthz`:
+
+```bash
+curl -fsS http://127.0.0.1:8009/api/live \
+  | python3 -c 'import json,sys; m=json.load(sys.stdin)["meta"]; print(m["enabled"], m["connected"], m["last_error"])'
+```
+
 ## Upgrade and rollback
 
 ```bash
@@ -320,6 +364,7 @@ Do not commit those backups to the repository.
 
 - The container starts with the host/Compose policy.
 - The refresh thread rebuilds the snapshot from the configured sources.
+- The optional live-stats thread reconnects to the configured stats socket.
 - File mode reads the current file; syslog mode starts with an empty ring.
 - HAProxy and rsyslog start according to their own service configuration.
 - `pull_policy: if_not_present` means a restart does not silently pull a new
@@ -332,6 +377,7 @@ See [security.md](security.md) for the full checklist. The short version:
 - keep the app behind HAProxy with TLS and authentication;
 - keep `APP_BIND=127.0.0.1` unless you have a controlled private network;
 - keep `TRUSTED_PROXIES` and `SYSLOG_ALLOWED_NETWORKS` narrow;
+- keep `HAPROXY_STATS_SOCKET` on a private interface with `level user` and firewall it to the analytics host;
 - keep `MASK_INTERNAL_IPS=true` unless raw internal client addresses are required;
 - use syslog TLS/mTLS across untrusted networks;
 - rotate credentials and certificates;

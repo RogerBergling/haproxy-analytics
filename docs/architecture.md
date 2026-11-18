@@ -14,6 +14,7 @@ a static browser dashboard, not a log platform.
 | GeoIP resolver | `haproxy_analytics/geoip.py` | Optional MaxMind City/ASN lookups from local MMDB files. Never performs network lookups. |
 | Log sources | `haproxy_analytics/logsource.py` | Read-only file tail reader, bounded syslog ring buffer and optional UDP/TCP receiver. |
 | Syslog store | `haproxy_analytics/syslog_store.py` | Optional append-only persistent syslog history with size rotation and a clear operation. |
+| Live stats | `haproxy_analytics/livestats.py` | Read-only HAProxy runtime API client, bounded cache and parser for `show info` / `show stat`. |
 | Configuration | `haproxy_analytics/config.py` | Parses environment and CLI values with safe defaults. |
 | Frontend | `public/` | Static HTML, CSS and ES modules. No build step, framework or CDN. |
 
@@ -41,6 +42,12 @@ a static browser dashboard, not a log platform.
                                 ▼
                     in-memory snapshot + HTML
                                 │
+ optional HAProxy stats socket  │
+ (remote, read-only, level user)│
+              │                 │
+              ▼                 │
+      live stats cache ─────────┤
+      (show info / show stat)   │
                                 ▼
                   same-origin HTTP server (no writes)
 ```
@@ -63,6 +70,9 @@ the error in `/healthz`.
 - **Both**: both sources are parsed. If the same events exist in both, they are
   counted twice, so the snapshot includes a warning.
 - **Demo**: reads the bundled synthetic log. It does not touch HAProxy.
+- **Live stats**: an independent, optional read-only connection to a dedicated
+  HAProxy stats socket. It does not consume log data and does not affect the
+  snapshot counters.
 
 ## Snapshot API
 
@@ -87,14 +97,35 @@ the error in `/healthz`.
 The API is same-origin and protected by the same network boundary as the HTML.
 It is not a public API.
 
+### Live stats API
+
+`GET /api/live` returns:
+
+- `meta`: whether live stats are enabled, connection state, endpoint,
+  refresh interval, last success/error, consecutive errors and warnings;
+- `info`: curated `show info` fields such as version, uptime, connections,
+  SSL counters, tasks, idle percentage and memory;
+- `summary`: aggregate frontend/backend/server counts, sessions, rates, bytes,
+  HTTP 4xx/5xx and errors;
+- `frontends`, `backends`, `servers`: bounded rows from `show stat`.
+  Internal server addresses and ports are intentionally omitted.
+
+The service sends only `show info;show stat`; the HTTP client cannot supply
+commands. A failed poll keeps the last good payload visible and updates the
+connection metadata. When no socket is configured, the endpoint returns a
+stable disabled payload with HTTP 200.
+
 ## Threading and memory
 
-- One refresh thread per process.
+- One refresh thread per process for the log snapshot.
+- One optional live-stats refresh thread when `HAPROXY_STATS_SOCKET` is set.
 - One thread per HTTP request (`ThreadingHTTPServer`).
 - Optional syslog threads (`ThreadingMixIn`), daemon threads.
 - The snapshot is replaced atomically under a lock.
 - Raw log lines are never stored in the snapshot. The visitor table is capped,
   top lists are capped, map points are capped and the syslog ring is bounded.
+- The live payload is capped by response size and row count. Server addresses
+  are dropped before the payload is stored.
 
 ## Security boundaries
 
@@ -108,9 +139,13 @@ It is not a public API.
    `TRUSTED_PROXIES`.
 5. **Syslog**: source allowlist, size limits and optional TLS/mTLS. Plain syslog
    has no authentication and must be kept on a trusted network.
-6. **Rendering**: dashboard values are inserted as text nodes and DOM APIs, never
+6. **Live stats**: an optional outbound connection to a dedicated read-only
+   stats socket. The socket has no TLS or authentication of its own, so it must
+   be bound to a private interface, firewalled to the analytics host and kept
+   at `level user`. The app sends only two whitelisted `show` commands.
+7. **Rendering**: dashboard values are inserted as text nodes and DOM APIs, never
    `innerHTML`. There is no third-party report iframe or chart script.
-7. **Container**: non-root user, read-only root filesystem, no capabilities and
+8. **Container**: non-root user, read-only root filesystem, no capabilities and
    `no-new-privileges`.
 
 ## Deliberate omissions
@@ -119,6 +154,8 @@ It is not a public API.
 - No user accounts, sessions, password hashes or MFA.
 - No external IP geolocation or map tile service.
 - No log upload endpoint.
+- No HAProxy runtime-control commands. Live stats are observation only.
+- No `show sess`, `show errors` or stick-table dumps in the web view; those expose client-level data beyond the aggregate live view.
 - No background job queue.
 - No automatic rotation or compression for the mounted file source. The optional syslog store rotates by size.
 - No long-term history unless the optional syslog store is enabled or the log is kept externally.

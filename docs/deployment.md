@@ -8,6 +8,7 @@ permissions, GeoIP data and upgrades. For HAProxy snippets see
 
 - Docker Engine 24+ with Compose v2.
 - A read-only HAProxy log file, or a syslog sender you control.
+- Optional: a dedicated read-only HAProxy stats socket for Live stats.
 - Optional: MaxMind GeoLite2 City and ASN databases.
 - Recommended: HAProxy in front for TLS and authentication.
 
@@ -84,6 +85,11 @@ uses the shell environment or CLI flags, not `.env` automatically.
 | `GEOIP_CITY_DB` | `/geoip/GeoLite2-City.mmdb` | City database path inside the container. |
 | `GEOIP_ASN_DB` | `/geoip/GeoLite2-ASN.mmdb` | ASN database path inside the container. |
 | `TRUSTED_PROXIES` | empty | Comma-separated CIDRs allowed to supply `X-Forwarded-For`. Use only the HAProxy address. |
+| `HAPROXY_STATS_SOCKET` | empty | Optional read-only HAProxy stats socket as `host:port`. Empty disables Live stats. |
+| `STATS_REFRESH_SECONDS` | `5` | Live stats poll interval. |
+| `STATS_TIMEOUT_SECONDS` | `2` | Live stats connect/read timeout. |
+| `STATS_MAX_BYTES` | `4194304` | Maximum runtime API response size. |
+| `STATS_MAX_ROWS` | `500` | Maximum rows per live table category. |
 | `SYSLOG_LISTEN` | empty | Optional `host:port`, for example `0.0.0.0:5514`. Empty disables the receiver. |
 | `SYSLOG_PROTOCOLS` | `udp` | `udp`, `tcp`, or both comma-separated. |
 | `SYSLOG_ALLOWED_NETWORKS` | `127.0.0.0/8,::1/128` | Source allowlist. Set the sending host or relay network. |
@@ -259,6 +265,64 @@ If the data directory is not writable, the app keeps running and reports write
 errors in the snapshot. The receiver still accepts lines into memory, but new
 lines may not appear until the store is writable again.
 
+### Live HAProxy stats socket
+
+The **Live stats** view is optional and read-only. It polls a dedicated HAProxy
+runtime socket and shows global info plus frontend, backend and server health,
+sessions, rates, errors and bytes. It never sends runtime-control commands.
+
+On the remote HAProxy, add a separate `level user` socket; do not reuse the
+admin socket:
+
+```haproxy
+global
+    stats socket /run/haproxy/admin.sock mode 660 level admin
+
+    # Replace with a private interface address on the HAProxy host.
+    stats socket ipv4@192.0.2.20:8404 level user
+    stats timeout 30s
+```
+
+On the analytics host:
+
+```dotenv
+HAPROXY_STATS_SOCKET=192.0.2.20:8404
+STATS_REFRESH_SECONDS=5
+STATS_TIMEOUT_SECONDS=2
+STATS_MAX_BYTES=4194304
+STATS_MAX_ROWS=500
+```
+
+Then recreate the container:
+
+```bash
+docker compose up -d --force-recreate
+```
+
+Security requirements:
+
+- Bind the socket to one private interface address, never `0.0.0.0`.
+- Firewall the port to the analytics host only.
+- Keep `level user`; `operator` and `admin` allow state-changing commands.
+- Do not publish the port through HAProxy or a router.
+- HAProxy's stats protocol has no TLS or authentication. Use an SSH tunnel or
+  mTLS agent if the network path is not fully trusted.
+- The app omits internal server addresses and ports from the live payload.
+- The live endpoint is protected by the same dashboard TLS/authentication
+  boundary. Do not expose the app port directly.
+
+Verify from the analytics host:
+
+```bash
+printf 'show info\n' | socat - TCP:192.0.2.20:8404 | head
+curl -fsS http://127.0.0.1:8009/api/live
+```
+
+The `/api/live` response includes `meta.enabled`, `meta.connected`,
+`meta.last_error`, `info`, `summary`, `frontends`, `backends` and `servers`.
+A failed poll keeps the last good payload and reports the connection error.
+When `HAPROXY_STATS_SOCKET` is empty, the endpoint returns a disabled payload
+and the dashboard shows a configuration hint.
 
 ## Put HAProxy in front
 
@@ -314,7 +378,8 @@ python3 -m haproxy_analytics \
   --port 8080 \
   --log ./logs/haproxy.log \
   --geoip-city ./geoip/GeoLite2-City.mmdb \
-  --geoip-asn ./geoip/GeoLite2-ASN.mmdb
+  --geoip-asn ./geoip/GeoLite2-ASN.mmdb \
+  --stats-socket 192.0.2.20:8404
 ```
 
 For the bundled demo:
@@ -336,6 +401,8 @@ CLI flags override the corresponding environment values.
 | Per-IP table has one grouped row | Masking is enabled. Disable internal masking as above to distinguish clients. |
 | HTTP details are empty | Is the log using `option httplog` on an HTTP frontend? Check the snapshot warnings for parser counts. |
 | Syslog buffer empty | Is `SYSLOG_LISTEN` set to `0.0.0.0:5514`, the Compose syslog port reachable and the sender allowlisted? Check the container logs and the health JSON. |
+| Live stats show `offline` | Is `HAPROXY_STATS_SOCKET` reachable from the container? Test with `socat` from the analytics host and check the HAProxy firewall and stats socket bind. |
+| Live stats disabled | Set `HAPROXY_STATS_SOCKET` to the private `host:port` and recreate the container. Empty disables the view intentionally. |
 | Viewer IP is the proxy | Set `TRUSTED_PROXIES` to the HAProxy address and ensure HAProxy sends `X-Forwarded-For`. |
 | 403/404 from HAProxy | Check the dashboard hostname, auth userlist and backend address. |
 | Container restarts | Check `docker compose logs`; a bad `SYSLOG_LISTEN`, TLS pair or port conflict fails fast. |

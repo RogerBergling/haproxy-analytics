@@ -49,6 +49,17 @@ def main() -> int:
             snapshot = json.loads(body) if status == 200 else {}
             checks.append(("snapshot API", status == 200 and snapshot.get("kpis", {}).get("http_total") == 20))
 
+            status, _headers, body = request(port, "GET", "/api/live")
+            live = json.loads(body) if status == 200 else {}
+            checks.append(
+                (
+                    "live API",
+                    status == 200
+                    and live.get("meta", {}).get("enabled") is False
+                    and live.get("frontends") == [],
+                )
+            )
+
             status, _headers, body = request(port, "GET", "/api/whoami")
             checks.append(("whoami API", status == 200 and json.loads(body).get("ip") == "127.0.0.1"))
 

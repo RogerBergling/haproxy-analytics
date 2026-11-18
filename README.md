@@ -4,9 +4,9 @@
 [![Publish Docker image](https://github.com/RogerBergling/haproxy-analytics/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/RogerBergling/haproxy-analytics/actions/workflows/docker-publish.yml)
 [![Secret scan](https://github.com/RogerBergling/haproxy-analytics/actions/workflows/gitleaks.yml/badge.svg)](https://github.com/RogerBergling/haproxy-analytics/actions/workflows/gitleaks.yml)
 
-**Read-only HAProxy traffic intelligence: HTTP requests, TLS/SNI connections, client geography, ASN networks and a searchable visitor table — without shipping logs to a third party.**
+**Read-only HAProxy traffic intelligence: HTTP requests, TLS/SNI connections, client geography, ASN networks, live runtime counters and a searchable visitor table — without shipping logs to a third party.**
 
-HAProxy Analytics is a small self-hosted service. It reads HAProxy logs from a mounted file or an optional syslog receiver, enriches client addresses with local MaxMind GeoLite2 databases, and serves a dark, responsive dashboard. The container has no database or upload endpoint. Syslog history is memory-only by default; an optional dedicated data volume persists it across restarts. The browser makes no third-party requests.
+HAProxy Analytics is a small self-hosted service. It reads HAProxy logs from a mounted file or an optional syslog receiver, optionally polls a dedicated read-only HAProxy stats socket, enriches client addresses with local MaxMind GeoLite2 databases, and serves a dark, responsive dashboard. The container has no database or upload endpoint. Syslog history is memory-only by default; an optional dedicated data volume persists it across restarts. The browser makes no third-party requests.
 
 > **The dashboard contains client IP addresses, hostnames and requested paths. It has no built-in login.** Run it behind HAProxy with TLS and authentication. The default Compose file binds the published port to `127.0.0.1`.
 
@@ -16,6 +16,7 @@ HAProxy Analytics is a small self-hosted service. It reads HAProxy logs from a m
 
 - **HTTP analytics** from HAProxy `option httplog` records: requests, bandwidth, methods, status codes, backends and requested paths.
 - **TLS/SNI analytics** from a TCP frontend that captures `req.ssl_sni`: hostnames, countries, ASNs and recent connections.
+- **Optional live stats** from a dedicated read-only HAProxy stats socket: global runtime counters, frontend/backend/server health, rates, sessions, errors and bytes. The app never sends runtime-control commands.
 - **Geo access** view: a world map plus searchable country and city tables, styled to match the other self-hosted apps in this workspace.
 - **Requests view**: the newest individual HTTP requests with time, client IP and port, country/city, method, status, request, bytes, frontend, backend/server and protocol, plus a text filter.
 - **Visitor table** grouped by observed client IP: SNI hostnames, HTTP backends, event counts and last-seen time.
@@ -97,12 +98,14 @@ HAProxy log file ──┐
 optional syslog ───┘                    │
                                         └──> local GeoLite2 City/ASN lookup
                                                     │
+optional HAProxy stats socket ──> live stats cache ─┼──> /api/live
+                                                    │
 browser <── same-origin HTTP <── Python server <─────┘
    │                              │
    └── /api/whoami (trusted proxy aware)
 ```
 
-The server never writes to the log source. It keeps one bounded snapshot in memory, rebuilds it on a timer, and serves the static dashboard plus a small JSON API. There is no database or queue. The optional syslog store persists received lines in a dedicated data directory; otherwise state is in memory. See [docs/architecture.md](docs/architecture.md).
+The server never writes to the log source and never sends HAProxy runtime-control commands. It keeps one bounded snapshot and one bounded live-stats payload in memory, rebuilds them on timers, and serves the static dashboard plus a small JSON API. There is no database or queue. The optional syslog store persists received lines in a dedicated data directory; otherwise state is in memory. See [docs/architecture.md](docs/architecture.md).
 
 ## Supported HAProxy formats
 
@@ -151,6 +154,11 @@ Copy [`.env.example`](.env.example) to `.env`. The most important settings:
 | `GEOIP_DIR` | `./geoip` | Host directory containing `GeoLite2-*.mmdb`. |
 | `GEOIP_CITY_DB` / `GEOIP_ASN_DB` | `/geoip/...` | Database paths inside the container. |
 | `TRUSTED_PROXIES` | empty | Comma-separated proxy IPs/CIDRs allowed to supply `X-Forwarded-For`. |
+| `HAPROXY_STATS_SOCKET` | empty | Optional read-only HAProxy stats socket as `host:port`. Empty disables Live stats. |
+| `STATS_REFRESH_SECONDS` | `5` | Live stats poll interval. |
+| `STATS_TIMEOUT_SECONDS` | `2` | Live stats connect and read timeout. |
+| `STATS_MAX_BYTES` | `4194304` | Maximum runtime API response size. |
+| `STATS_MAX_ROWS` | `500` | Maximum rows per frontend/backend/server table. |
 | `SYSLOG_LISTEN` | empty | Optional `host:port` syslog listener. Empty disables it. |
 | `MAX_REQUEST_ROWS` | `2000` | Newest individual HTTP requests retained for the Requests view and API. |
 | `SYSLOG_ALLOWED_NETWORKS` | `127.0.0.0/8,::1/128` | Source allowlist for the syslog receiver. |
@@ -168,6 +176,7 @@ Internal addresses are masked by default. With `MASK_FULL=true` all masked clien
 - **Read-only root filesystem.** Non-root user, read-only root, all capabilities dropped, `no-new-privileges`, small `/tmp` tmpfs. The optional syslog history writes only to its dedicated data volume.
 - **No third-party browser requests.** No CDN, external fonts, analytics, map tiles or IP-lookup service. A strict CSP blocks outbound connections.
 - **A local GeoIP lookup.** MaxMind databases are mounted files; client IPs are never sent to MaxMind or anyone else.
+- **Read-only runtime access.** The optional Live stats view connects to a dedicated HAProxy stats socket at `level user` and only sends `show info;show stat`. Bind the socket to a private interface and firewall it to the analytics host; HAProxy stats sockets have no TLS or authentication of their own. Never expose the socket or reuse the admin socket.
 - **Explicit proxy trust.** `X-Forwarded-For` is ignored unless the immediate peer is in `TRUSTED_PROXIES`.
 - **Internal IP masking.** Private/internal addresses are masked by default in the dashboard and API; public addresses remain visible.
 - **Bounded inputs.** Log tail size, visitor rows, individual request rows and syslog message size are all capped.
@@ -220,6 +229,7 @@ The CI workflow runs tests on Python 3.11 and 3.12, verifies the repository, run
 - Decrypting TLS passthrough traffic. SNI analytics observes ClientHello metadata only.
 - Replacing a SIEM, long-term log store or intrusion detection system.
 - Replacing a central log store or building a long-term multi-node archive.
+- Changing HAProxy runtime state (enable/disable servers, weights or sessions). Live stats are read-only.
 - Sending analytics, GeoIP lookups or telemetry to a third party.
 
 ## License

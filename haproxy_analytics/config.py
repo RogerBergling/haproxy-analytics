@@ -91,6 +91,40 @@ def _parse_listen(value: str) -> tuple[str, int] | None:
     return host, port
 
 
+def _parse_host_port(name: str, value: str) -> tuple[str, int] | None:
+    if not value:
+        return None
+    if value.startswith("["):
+        host, separator, port_text = value[1:].partition("]:")
+        if not separator:
+            raise ConfigError(f"{name} must look like [::1]:8404, got {value!r}")
+    else:
+        host, separator, port_text = value.rpartition(":")
+        if not separator:
+            raise ConfigError(f"{name} must look like 127.0.0.1:8404, got {value!r}")
+    host = host.strip()
+    if not host:
+        raise ConfigError(f"{name} is missing a host: {value!r}")
+    if any(character.isspace() for character in host):
+        raise ConfigError(f"{name} contains an invalid host: {value!r}")
+    if host in {"0.0.0.0", "::", "*"}:
+        raise ConfigError(f"{name} must use a specific host, not {host!r}")
+    if ":" in host and not value.startswith("["):
+        try:
+            ipaddress.ip_address(host)
+        except ValueError as exc:
+            raise ConfigError(
+                f"{name} must use brackets for IPv6 or a host:port pair: {value!r}"
+            ) from exc
+    try:
+        port = int(port_text)
+    except ValueError as exc:
+        raise ConfigError(f"{name} has an invalid port: {value!r}") from exc
+    if not 1 <= port <= 65535:
+        raise ConfigError(f"{name} port must be between 1 and 65535, got {port}")
+    return host, port
+
+
 def _resolve_path(value: str, default: Path) -> Path:
     if not value:
         return default
@@ -130,6 +164,13 @@ class Settings:
     syslog_tls_key: Path | None
     syslog_tls_ca: Path | None
     syslog_tls_require_client_cert: bool
+    stats_socket: str | None
+    stats_host: str | None
+    stats_port: int | None
+    stats_refresh_seconds: int
+    stats_timeout_seconds: int
+    stats_max_bytes: int
+    stats_max_rows: int
     log_level: str
 
     @classmethod
@@ -174,6 +215,9 @@ class Settings:
 
         trusted = _parse_networks("TRUSTED_PROXIES", _env_csv("TRUSTED_PROXIES"))
 
+        stats_socket = _env("HAPROXY_STATS_SOCKET")
+        stats_endpoint = _parse_host_port("HAPROXY_STATS_SOCKET", stats_socket)
+
         app_port = _env_int("APP_PORT", 8080, 1)
         if app_port > 65535:
             raise ConfigError(f"APP_PORT must be between 1 and 65535, got {app_port}")
@@ -215,6 +259,13 @@ class Settings:
             syslog_tls_key=tls_key,
             syslog_tls_ca=tls_ca,
             syslog_tls_require_client_cert=require_client_cert,
+            stats_socket=stats_socket or None,
+            stats_host=stats_endpoint[0] if stats_endpoint else None,
+            stats_port=stats_endpoint[1] if stats_endpoint else None,
+            stats_refresh_seconds=_env_int("STATS_REFRESH_SECONDS", 5, 1),
+            stats_timeout_seconds=_env_int("STATS_TIMEOUT_SECONDS", 2, 1),
+            stats_max_bytes=_env_int("STATS_MAX_BYTES", 4 * 1024 * 1024, 65536),
+            stats_max_rows=_env_int("STATS_MAX_ROWS", 500, 1),
             log_level=_env("LOG_LEVEL", "INFO").upper() or "INFO",
         )
 
