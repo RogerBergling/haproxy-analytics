@@ -44,10 +44,10 @@ services:
       TZ: ${TZ:-UTC}
     ports:
       - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8080}:8080"
-      # Enable these only when the syslog receiver is configured and the
-      # sending host is restricted by the network allowlist and firewall.
-      # - "${SYSLOG_BIND:-127.0.0.1}:${SYSLOG_PORT:-5514}:5514/udp"
-      # - "${SYSLOG_BIND:-127.0.0.1}:${SYSLOG_PORT:-5514}:5514/tcp"
+      # The receiver itself is disabled unless SYSLOG_LISTEN is set. These
+      # mappings stay on loopback until SYSLOG_BIND is changed deliberately.
+      - "${SYSLOG_BIND:-127.0.0.1}:${SYSLOG_PORT:-5514}:5514/udp"
+      - "${SYSLOG_BIND:-127.0.0.1}:${SYSLOG_PORT:-5514}:5514/tcp"
     volumes:
       - "${HAPROXY_LOG_DIR:-./logs}:/logs:ro"
       - "${GEOIP_DIR:-./geoip}:/geoip:ro"

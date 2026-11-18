@@ -161,11 +161,10 @@ directly into the container:
 2. Set `SYSLOG_LISTEN=0.0.0.0:5514`.
 3. Set `SYSLOG_ALLOWED_NETWORKS` to the sender or relay network, for example
    `192.0.2.10/32` (documentation address; replace it).
-4. Uncomment the UDP and/or TCP port mapping in `compose.yaml`.
-5. Set `SYSLOG_BIND` to the host interface that should receive syslog. Keep
-   `127.0.0.1` if a local rsyslog relay forwards to the container; otherwise use
-   the controlled private interface.
-6. Restart: `docker compose up -d --force-recreate`.
+4. The Compose file already publishes the receiver ports on loopback; set
+   `SYSLOG_BIND` to the host interface a remote sender can reach. Keep
+   `127.0.0.1` if a local rsyslog relay forwards to the container.
+5. Restart: `docker compose up -d --force-recreate`.
 
 For TCP TLS, set `SYSLOG_PROTOCOLS=tcp`, mount `./certs` and set container paths:
 
@@ -252,7 +251,7 @@ CLI flags override the corresponding environment values.
 | Geo columns show Unknown | Is `maxminddb` installed and are both MMDB paths valid? Private addresses are intentionally not geolocated. |
 | GeoIP DB missing warning | Mount `./geoip` and set the two paths. The rest of the dashboard still works. |
 | GoAccess tab says not enabled | Set `GOACCESS_ENABLED=true` and restart. Check `docker compose logs` for format errors. |
-| Syslog buffer empty | Is `SYSLOG_LISTEN` set, the Compose port uncommented and the sender allowlisted? Check the container logs and the health JSON. |
+| Syslog buffer empty | Is `SYSLOG_LISTEN` set to `0.0.0.0:5514`, the Compose syslog port reachable and the sender allowlisted? Check the container logs and the health JSON. |
 | Viewer IP is the proxy | Set `TRUSTED_PROXIES` to the HAProxy address and ensure HAProxy sends `X-Forwarded-For`. |
 | 403/404 from HAProxy | Check the dashboard hostname, auth userlist and backend address. |
 | Container restarts | Check `docker compose logs`; a bad `SYSLOG_LISTEN`, TLS pair or port conflict fails fast. |

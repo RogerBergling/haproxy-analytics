@@ -130,7 +130,8 @@ SYSLOG_BIND=127.0.0.1
 SYSLOG_PORT=5514
 ```
 
-Uncomment the matching mapping in `compose.yaml`:
+The Compose file already publishes the receiver ports on loopback. Set
+`SYSLOG_BIND` to the host interface a remote sender can reach:
 
 ```yaml
 ports:
@@ -243,7 +244,7 @@ does not already contain the same forwarded records.
 | Symptom | Check |
 | --- | --- |
 | Receiver warning says loopback-only | `SYSLOG_ALLOWED_NETWORKS` still has only `127.0.0.0/8,::1/128`. Add the sender/relay network. |
-| Buffer stays empty | Is `SYSLOG_LISTEN` set? Is the Compose port uncommented? Is the host firewall open to the sender? |
+| Buffer stays empty | Is `SYSLOG_LISTEN` set to `0.0.0.0:5514`? Is the Compose syslog port reachable? Is the host firewall open to the sender? |
 | Rejected messages | The source address is outside `SYSLOG_ALLOWED_NETWORKS`. Check NAT and the actual peer address. |
 | Dropped messages | The message exceeded `SYSLOG_MAX_MESSAGE_BYTES` or the ring exceeded `SYSLOG_BUFFER_LINES`. |
 | TLS handshake fails | Certificate/key pairing, CA bundle, hostname, client certificate or clock skew. Check both ends' logs. |
