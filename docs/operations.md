@@ -132,18 +132,24 @@ The **HTTP analytics** page includes:
 
 - total requests, unique HTTP client IPs, bandwidth, 4xx/5xx counts and average
   response size;
-- status classes (2xx/3xx/4xx/5xx), methods, protocols and an hourly
+- method types, status classes (2xx/3xx/4xx/5xx), protocols and an hourly
   distribution;
 - top paths with requests, unique visitors and bytes, plus backends, countries and ASNs;
 - a **Per-IP HTTP details** table with request/byte totals, error counts,
-  status classes, methods, protocols, top paths, backends and first/last seen
-  timestamps.
+  status classes, method types, protocols, top paths, backends and first/last
+  seen timestamps;
+- a **Latest requests** table with method, status, path, bytes, backend/server
+  and protocol, plus a link to the full Requests tab.
 
 The **Requests** tab lists the newest individual HTTP events, capped by
 `MAX_REQUEST_ROWS` (default 2000). It includes time, client address and port,
-country/city, request, status, bytes, frontend, backend/server and protocol.
-The text filter searches all columns. **View requests** on a per-IP row opens
-the Requests tab with that client preselected.
+country/city, method, request, status, bytes, frontend, backend/server and
+protocol. The text filter searches all columns. **View requests** on a per-IP
+row opens the Requests tab with that client preselected.
+
+Increase `MAX_REQUEST_ROWS` and `MAX_LOG_BYTES` together if you need a longer
+individual-request list. The counters and per-IP details are always computed
+over the parsed log window, even when only the newest request rows are kept.
 
 ### Private IPs and per-IP detail
 

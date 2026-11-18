@@ -155,7 +155,7 @@ The **Per-IP HTTP details** table adds, for each displayed client IP:
 
 - request and byte totals, plus 4xx/5xx counts;
 - 2xx/3xx/4xx/5xx breakdowns;
-- methods, protocols, top paths and backends;
+- method types, protocols, top paths and backends;
 - first and last seen timestamps.
 
 The **Requests** tab lists the newest individual HTTP requests, including

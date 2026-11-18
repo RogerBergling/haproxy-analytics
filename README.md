@@ -17,11 +17,11 @@ HAProxy Analytics is a small self-hosted service. It reads HAProxy logs from a m
 - **HTTP analytics** from HAProxy `option httplog` records: requests, bandwidth, methods, status codes, backends and requested paths.
 - **TLS/SNI analytics** from a TCP frontend that captures `req.ssl_sni`: hostnames, countries, ASNs and recent connections.
 - **Geo access** view: a world map plus searchable country and city tables, styled to match the other self-hosted apps in this workspace.
-- **Requests view**: the newest individual HTTP requests with time, client, country/city, status, request, bytes, frontend, backend and protocol, plus a text filter.
+- **Requests view**: the newest individual HTTP requests with time, client IP and port, country/city, method, status, request, bytes, frontend, backend/server and protocol, plus a text filter.
 - **Visitor table** grouped by observed client IP: SNI hostnames, HTTP backends, event counts and last-seen time.
 - **Internal IP masking** enabled by default: private, loopback and documentation addresses are masked in the dashboard and API; public addresses remain visible.
 - **"This is you"** highlight through the local `/api/whoami` endpoint. Forwarded addresses are trusted only from explicitly configured proxies; internal viewers see a masked notice instead of a highlight.
-- **Detailed native HTTP view**: status classes, protocol mix, hourly distribution, bandwidth, and per-IP request/byte/status/path/backend details.
+- **Detailed native HTTP view**: method types, status classes, protocol mix, hourly distribution, bandwidth, and per-IP request/byte/status/path/backend details.
 - **Optional syslog receiver** for HAProxy hosts that cannot mount a log file locally. Disabled by default, with a source allowlist and optional TCP TLS/mTLS.
 - **Optional persistent syslog history** in a host-mounted data directory, with size rotation and a clear-history action in the dashboard.
 - **Graceful degradation**: no MaxMind database and no log file do not crash the dashboard; they produce clear warnings and an empty state.

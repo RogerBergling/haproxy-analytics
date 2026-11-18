@@ -333,7 +333,7 @@
         </div>
         <div class="filter-bar">
           <label class="sr-only" for="http-ip-search">Filter HTTP IPs</label>
-          <input class="search-input" id="http-ip-search" type="search" placeholder="Filter IP, country, ASN, path, backend…" autocomplete="off">
+          <input class="search-input" id="http-ip-search" type="search" placeholder="Filter IP, method, country, ASN, path, backend…" autocomplete="off">
           <span class="result-count" id="http-ip-count">0 IPs</span>
         </div>
         <div class="table-wrap table-scroll http-ip-scroll">
@@ -347,7 +347,7 @@
                 <th class="number-cell">Bytes</th>
                 <th class="number-cell">4xx / 5xx</th>
                 <th>Status classes</th>
-                <th>Methods</th>
+                <th>Method types</th>
                 <th>Top paths</th>
                 <th>Backends</th>
                 <th>First seen</th>
@@ -359,6 +359,30 @@
           </table>
         </div>
         <div class="card-body"><p class="card-sub" id="http-ip-note">Masked clients are grouped by their displayed address.</p></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div><div class="card-title">Latest requests</div><div class="card-sub">Newest 25 HTTP requests with method type; open Requests for the full list</div></div>
+          <button class="link-button" type="button" data-view-link="requests">All requests</button>
+        </div>
+        <div class="table-wrap table-scroll">
+          <table class="data-table request-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Client</th>
+                <th>Method</th>
+                <th>Status</th>
+                <th>Request</th>
+                <th class="number-cell">Bytes</th>
+                <th>Backend / server</th>
+                <th>Protocol</th>
+              </tr>
+            </thead>
+            <tbody id="http-latest-requests"></tbody>
+          </table>
+        </div>
       </section>
     </section>
 
@@ -378,7 +402,7 @@
         </div>
         <div class="filter-bar">
           <label class="sr-only" for="request-search">Filter requests</label>
-          <input class="search-input" id="request-search" type="search" placeholder="Filter IP, path, status, backend, country…" autocomplete="off">
+          <input class="search-input" id="request-search" type="search" placeholder="Filter IP, method, path, status, backend…" autocomplete="off">
           <span class="result-count" id="request-count">0 requests</span>
         </div>
         <div class="table-wrap table-scroll request-scroll">
@@ -388,6 +412,7 @@
                 <th>Time</th>
                 <th>Client</th>
                 <th>Country / city</th>
+                <th>Method</th>
                 <th>Status</th>
                 <th>Request</th>
                 <th class="number-cell">Bytes</th>

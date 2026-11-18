@@ -115,6 +115,7 @@ class SnapshotTests(unittest.TestCase):
         recent = snapshot["http"]["recent"]
         self.assertEqual(len(recent), 2)
         self.assertEqual(recent[0]["path"], "/three")
+        self.assertEqual(recent[0]["method"], "GET")
         self.assertEqual(recent[0]["bytes"], 30)
         self.assertEqual(recent[0]["port"], "1234")
         self.assertEqual(recent[0]["server"], "app1")

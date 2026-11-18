@@ -505,6 +505,7 @@ function renderHttp() {
     "No hourly data"
   );
   renderHttpIps();
+  renderHttpLatestRequests();
   const body = $("#http-paths");
   if (!body) return;
   clear(body);
@@ -541,6 +542,55 @@ function viewRequestsFor(ip) {
   const search = $("#request-search");
   if (search) search.value = ip;
   renderRequests();
+}
+
+function renderHttpLatestRequests() {
+  if (!state.snapshot) return;
+  const tbody = $("#http-latest-requests");
+  if (!tbody) return;
+  const rows = (state.snapshot.http.recent || []).slice(0, 25);
+  clear(tbody);
+  if (!rows.length) {
+    tbody.append(
+      el("tr", {
+        children: [
+          el("td", {
+            className: "muted",
+            attrs: { colspan: "8" },
+            text: "No HTTP requests are available yet.",
+          }),
+        ],
+      })
+    );
+    return;
+  }
+  for (const item of rows) {
+    const requestCell = el("td", {
+      className: "wrap-cell",
+      text: item.path,
+      attrs: { title: item.path },
+    });
+    if (item.count > 1) {
+      requestCell.append(el("span", { className: "badge info", text: ` ×${fmt(item.count)}` }));
+    }
+    tbody.append(
+      el("tr", {
+        children: [
+          el("td", { className: "mono", text: item.time }),
+          el("td", {
+            className: "mono",
+            text: item.port && item.port !== "-" ? `${item.ip}:${item.port}` : item.ip,
+          }),
+          el("td", { className: "mono", text: item.method }),
+          el("td", { children: [el("span", { className: `badge ${statusBadgeClass(item.status)}`, text: item.status })] }),
+          requestCell,
+          el("td", { className: "number-cell", text: fmt(item.bytes * (item.count || 1)) }),
+          el("td", { text: item.server && item.server !== "-" ? `${item.backend}/${item.server}` : item.backend }),
+          el("td", { text: item.protocol }),
+        ],
+      })
+    );
+  }
 }
 
 function renderHttpIps() {
@@ -651,11 +701,10 @@ function renderRequests() {
     if (search && !haystack.includes(search)) continue;
     shown += 1;
     const location = [item.city, item.country].filter((part) => part && part !== "-").join(", ") || "Unknown";
-    const requestText = item.method === "-" ? item.path : `${item.method} ${item.path}`;
     const requestCell = el("td", {
       className: "wrap-cell",
-      text: requestText,
-      attrs: { title: requestText },
+      text: item.path,
+      attrs: { title: item.path },
     });
     if (item.count > 1) {
       requestCell.append(el("span", { className: "badge info", text: ` ×${fmt(item.count)}` }));
@@ -669,6 +718,7 @@ function renderRequests() {
             text: item.port && item.port !== "-" ? `${item.ip}:${item.port}` : item.ip,
           }),
           el("td", { text: location }),
+          el("td", { className: "mono", text: item.method }),
           el("td", { children: [el("span", { className: `badge ${statusBadgeClass(item.status)}`, text: item.status })] }),
           requestCell,
           el("td", { className: "number-cell", text: fmt(item.bytes * (item.count || 1)) }),
@@ -685,7 +735,7 @@ function renderRequests() {
         children: [
           el("td", {
             className: "muted",
-            attrs: { colspan: "9" },
+            attrs: { colspan: "10" },
             text: search ? "No requests match the filter." : "No HTTP requests are available yet.",
           }),
         ],
