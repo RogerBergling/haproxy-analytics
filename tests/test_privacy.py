@@ -60,6 +60,16 @@ class PrivacyTests(unittest.TestCase):
             "198.51.100.20",
         )
 
+    def test_full_mask(self) -> None:
+        networks = (
+            ipaddress.ip_network("192.0.0.0/8"),
+            ipaddress.ip_network("172.0.0.0/8"),
+        )
+        self.assertEqual(mask_ip("192.0.2.10", networks, full=True), "x.x.x.x")
+        self.assertEqual(mask_ip("172.0.0.5", networks, full=True), "x.x.x.x")
+        self.assertEqual(mask_ip("8.8.8.8", networks, full=True), "8.8.8.8")
+        self.assertEqual(mask_ip("2001:db8::1", full=True), "x:x:x:x:x:x:x:x")
+
     def test_http_log_line_is_masked(self) -> None:
         self.assertEqual(
             mask_http_line(

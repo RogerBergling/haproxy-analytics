@@ -224,6 +224,20 @@ The configured network prefix controls the mask:
 `MASK_NETWORKS` works with `MASK_INTERNAL_IPS=false` if you want to mask only
 the listed ranges and leave all other addresses unchanged.
 
+Set `MASK_FULL=true` when you want a single opaque mask instead of a prefix:
+
+```dotenv
+MASK_FULL=true
+```
+
+```text
+IPv4  -> x.x.x.x
+IPv6  -> x:x:x:x:x:x:x:x
+```
+
+With a full mask, all masked rows of the same family are grouped into one row.
+Public addresses that are not in `MASK_NETWORKS` remain unchanged.
+
 ## GeoIP privacy
 
 MaxMind GeoLite2 lookups are local file reads. Client IP addresses are not sent

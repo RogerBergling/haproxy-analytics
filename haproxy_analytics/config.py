@@ -112,6 +112,7 @@ class Settings:
     max_visitor_rows: int
     mask_internal_ips: bool
     mask_networks: tuple[IPNetwork, ...]
+    mask_full: bool
     geoip_city_db: Path
     geoip_asn_db: Path
     trusted_proxies: tuple[IPNetwork, ...]
@@ -193,6 +194,7 @@ class Settings:
             max_visitor_rows=_env_int("MAX_VISITOR_ROWS", 5000, 1),
             mask_internal_ips=_env_bool("MASK_INTERNAL_IPS", True),
             mask_networks=_parse_networks("MASK_NETWORKS", _env_csv("MASK_NETWORKS")),
+            mask_full=_env_bool("MASK_FULL", False),
             geoip_city_db=_resolve_path(_env("GEOIP_CITY_DB"), Path("/geoip/GeoLite2-City.mmdb")),
             geoip_asn_db=_resolve_path(_env("GEOIP_ASN_DB"), Path("/geoip/GeoLite2-ASN.mmdb")),
             trusted_proxies=trusted,

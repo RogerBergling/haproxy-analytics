@@ -76,6 +76,7 @@ uses the shell environment or CLI flags, not `.env` automatically.
 | `MAX_VISITOR_ROWS` | `5000` | Upper bound on returned visitor rows. |
 | `MASK_INTERNAL_IPS` | `true` | Mask non-global client IPs (private, loopback, documentation) in the dashboard and API. Public IPs remain visible. |
 | `MASK_NETWORKS` | empty | Additional CIDRs to mask even if public, for example `192.0.0.0/8,172.0.0.0/8`. |
+| `MASK_FULL` | `false` | Use one full mask (`x.x.x.x` / `x:x:x:x:x:x:x:x`) instead of prefix masks. |
 | `GEOIP_DIR` | `./geoip` | Host directory mounted at `/geoip` read-only. |
 | `GEOIP_CITY_DB` | `/geoip/GeoLite2-City.mmdb` | City database path inside the container. |
 | `GEOIP_ASN_DB` | `/geoip/GeoLite2-ASN.mmdb` | ASN database path inside the container. |

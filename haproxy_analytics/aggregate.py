@@ -21,11 +21,13 @@ class Aggregator:
         max_visitor_rows: int = 5000,
         mask_internal_ips: bool = False,
         mask_networks: tuple[IPNetwork, ...] = (),
+        mask_full: bool = False,
     ) -> None:
         self.geo = geo
         self.max_visitor_rows = max_visitor_rows
         self.mask_internal_ips = mask_internal_ips
         self.mask_networks = mask_networks
+        self.mask_full = mask_full
         self.masking_enabled = mask_internal_ips or bool(mask_networks)
 
         self.http_total = 0
@@ -175,7 +177,7 @@ class Aggregator:
             return counter
         masked: Counter[str] = Counter()
         for name, count in counter.items():
-            masked[mask_text_ips(name, self.mask_networks, self.mask_internal_ips)] += count
+            masked[mask_text_ips(name, self.mask_networks, self.mask_internal_ips, self.mask_full)] += count
         return masked
 
     @staticmethod
@@ -246,7 +248,7 @@ class Aggregator:
         if self.masking_enabled:
             merged: dict[str, dict[str, Any]] = {}
             for row in visitor_rows:
-                display_ip = mask_ip(row["ip"], self.mask_networks, self.mask_internal_ips)
+                display_ip = mask_ip(row["ip"], self.mask_networks, self.mask_internal_ips, self.mask_full)
                 if display_ip not in merged:
                     merged[display_ip] = {
                         "ip": display_ip,
@@ -357,7 +359,7 @@ class Aggregator:
                     "total": total,
                     "ips": sorted(
                         {
-                            mask_ip(ip, self.mask_networks, self.mask_internal_ips)
+                            mask_ip(ip, self.mask_networks, self.mask_internal_ips, self.mask_full)
                             if self.masking_enabled
                             else ip
                             for ip in stats["ips"]
@@ -372,7 +374,7 @@ class Aggregator:
         if self.masking_enabled:
             http_paths: Counter[str] = Counter()
             for name, count in self.http_paths.items():
-                http_paths[mask_text_ips(name, self.mask_networks, self.mask_internal_ips)] += count
+                http_paths[mask_text_ips(name, self.mask_networks, self.mask_internal_ips, self.mask_full)] += count
         else:
             http_paths = self.http_paths
 
@@ -410,10 +412,10 @@ class Aggregator:
                 "recent": [
                     {
                         "time": when,
-                        "ip": mask_ip(ip, self.mask_networks, self.mask_internal_ips)
+                        "ip": mask_ip(ip, self.mask_networks, self.mask_internal_ips, self.mask_full)
                         if self.masking_enabled
                         else ip,
-                        "sni": mask_text_ips(sni, self.mask_networks, self.mask_internal_ips)
+                        "sni": mask_text_ips(sni, self.mask_networks, self.mask_internal_ips, self.mask_full)
                         if self.masking_enabled
                         else sni,
                         "country": country,

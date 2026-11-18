@@ -31,7 +31,7 @@ def _empty_payload(message: str) -> dict[str, Any]:
             "source": {"file": {"exists": False}, "syslog": {"enabled": False}},
             "geoip": {"city": False, "asn": False},
             "goaccess": {"enabled": False, "available": False, "generated": False, "error": None},
-            "privacy": {"mask_internal_ips": True, "mask_networks": []},
+            "privacy": {"mask_internal_ips": True, "mask_networks": [], "mask_full": False},
             "parser": {"unparsed_lines": 0, "repeated_groups": 0, "events": 0},
             "warnings": [message],
             "duration_ms": 0,
@@ -200,6 +200,7 @@ class SnapshotService:
                 self.settings.max_visitor_rows,
                 mask_internal_ips=self.settings.mask_internal_ips,
                 mask_networks=self.settings.mask_networks,
+                mask_full=self.settings.mask_full,
             )
             goaccess_lines: list[str] = []
             goaccess_cap = self.settings.goaccess_max_lines
@@ -224,6 +225,7 @@ class SnapshotService:
                                     http_message,
                                     self.settings.mask_networks,
                                     self.settings.mask_internal_ips,
+                                    self.settings.mask_full,
                                 )
                             goaccess_lines.extend([http_message] * repeat)
             finally:
@@ -273,6 +275,7 @@ class SnapshotService:
                 "privacy": {
                     "mask_internal_ips": self.settings.mask_internal_ips,
                     "mask_networks": [str(network) for network in self.settings.mask_networks],
+                    "mask_full": self.settings.mask_full,
                 },
                 "parser": data["parser"],
                 "warnings": warnings,

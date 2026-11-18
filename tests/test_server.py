@@ -171,6 +171,28 @@ class ServerTests(unittest.TestCase):
                 self.assertEqual(payload["ip"], "198.51.100.20")
                 self.assertFalse(payload["masked"])
 
+
+    def test_whoami_full_mask(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            settings = demo_settings(
+                Path(temp),
+                mask_internal_ips=False,
+                mask_networks=(ipaddress.ip_network("192.0.0.0/8"),),
+                mask_full=True,
+                trusted_proxies=(ipaddress.ip_network("127.0.0.1/32"),),
+            )
+            with running_server(settings) as (port, _service):
+                status, _headers, body = request(
+                    port,
+                    "GET",
+                    "/api/whoami",
+                    headers={"X-Forwarded-For": "192.0.2.10"},
+                )
+                payload = json.loads(body)
+                self.assertEqual(status, 200)
+                self.assertEqual(payload["ip"], "x.x.x.x")
+                self.assertTrue(payload["masked"])
+
     def test_snapshot_reports_masking(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             settings = demo_settings(Path(temp), mask_internal_ips=True)

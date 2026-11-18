@@ -241,7 +241,12 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
             )
         )
         if masked:
-            ip = mask_ip(ip, self.settings.mask_networks, self.settings.mask_internal_ips)
+            ip = mask_ip(
+                ip,
+                self.settings.mask_networks,
+                self.settings.mask_internal_ips,
+                self.settings.mask_full,
+            )
         self._send_json({"ip": ip, "masked": masked}, head_only=head_only)
 
     def _serve_health(self, *, head_only: bool = False) -> None:
