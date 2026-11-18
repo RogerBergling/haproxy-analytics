@@ -43,7 +43,7 @@ The main assets are:
 
 ### 1. Keep the app behind HAProxy
 
-The default Compose binding is `127.0.0.1:8080`. Keep it that way unless you have
+The default Compose binding is `127.0.0.1:8009` (host) to `8080` (container). Keep it that way unless you have
 a separate, controlled network boundary. HAProxy must:
 
 - terminate TLS for a dedicated dashboard hostname;
@@ -211,7 +211,7 @@ content.
 - The app cannot make plain syslog trustworthy.
 - The app cannot prevent an operator from sharing sensitive screenshots.
 - The app cannot validate the accuracy of MaxMind data.
-- The app cannot enforce HAProxy authentication if port 8080 is exposed
+- The app cannot enforce HAProxy authentication if the published dashboard port is exposed
   directly.
 - The self-highlight is an IP comparison, not proof of identity. NAT and proxies
   make one IP represent multiple people.

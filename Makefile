@@ -12,7 +12,7 @@ help:
 	@echo "  make verify        check the public repository for missing or unsafe content"
 	@echo "  make validate      compile, test, verify and smoke-test"
 	@echo "  make docker-build  build the local container image"
-	@echo "  make docker-run    run the local image on 127.0.0.1:8080 with demo data"
+	@echo "  make docker-run    run the local image on 127.0.0.1:8009 with demo data"
 
 run:
 	$(PYTHON) -m haproxy_analytics
@@ -40,7 +40,7 @@ docker-build:
 	docker build -t $(IMAGE) .
 
 docker-run:
-	docker run --rm -p 127.0.0.1:8080:8080 \
+	docker run --rm -p 127.0.0.1:8009:8080 \
 		-e DEMO_MODE=true \
 		-e HAPROXY_LOG_FILE= \
 		--read-only --cap-drop=ALL \

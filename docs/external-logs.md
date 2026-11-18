@@ -135,7 +135,7 @@ The Compose file already publishes the receiver ports on loopback. Set
 
 ```yaml
 ports:
-  - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8080}:8080"
+  - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8009}:8080"
   - "${SYSLOG_BIND:-127.0.0.1}:${SYSLOG_PORT:-5514}:5514/udp"
   # - "${SYSLOG_BIND:-127.0.0.1}:${SYSLOG_PORT:-5514}:5514/tcp"
 ```

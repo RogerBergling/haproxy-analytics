@@ -43,7 +43,7 @@ services:
       SYSLOG_TLS_REQUIRE_CLIENT_CERT: ${SYSLOG_TLS_REQUIRE_CLIENT_CERT:-false}
       TZ: ${TZ:-UTC}
     ports:
-      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8080}:8080"
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8009}:8080"
       # The receiver itself is disabled unless SYSLOG_LISTEN is set. These
       # mappings stay on loopback until SYSLOG_BIND is changed deliberately.
       - "${SYSLOG_BIND:-127.0.0.1}:${SYSLOG_PORT:-5514}:5514/udp"

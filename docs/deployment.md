@@ -54,7 +54,7 @@ docker compose up -d
 docker compose ps
 ```
 
-Open <http://127.0.0.1:8080>. If the dashboard is empty, check
+Open <http://127.0.0.1:8009>. If the dashboard is empty, check
 `docker compose logs -f haproxy-analytics` and the snapshot warnings in the UI.
 
 ## Environment reference
@@ -67,7 +67,7 @@ uses the shell environment or CLI flags, not `.env` automatically.
 | --- | --- | --- |
 | `IMAGE_TAG` | `latest` | Use a tag or digest you have reviewed. |
 | `APP_BIND` | `127.0.0.1` | Host interface for the published port. Keep loopback unless HAProxy is on the same host and the network is controlled. |
-| `APP_PORT` | `8080` | Host port. The container always listens on 8080 internally. |
+| `APP_PORT` | `8009` | Published host port. The container always listens on 8080 internally. |
 | `TZ` | `UTC` | Container timezone for generated-at timestamps. HAProxy log timestamps keep their recorded timezone-free value. |
 | `HAPROXY_LOG_DIR` | `./logs` | Host directory mounted at `/logs` read-only. |
 | `HAPROXY_LOG_FILE` | `/logs/haproxy.log` | Path inside the container. Set to empty to disable file mode (syslog only). |
@@ -184,18 +184,18 @@ The app has no login. HAProxy should:
 
 - terminate TLS for a dedicated dashboard hostname;
 - require authentication;
-- forward to `127.0.0.1:8080`;
+- forward to the published host port, `127.0.0.1:8009` by default;
 - optionally add `X-Forwarded-For` (and set `TRUSTED_PROXIES` to the HAProxy
   address) so `/api/whoami` can identify the viewer.
 
 A complete example is in [haproxy.md](haproxy.md#protect-the-dashboard-with-haproxy).
-Do not publish port 8080 to the internet.
+Do not publish the dashboard port (8009 by default) to the internet.
 
 ## Health and operations
 
 ```bash
-curl -fsS http://127.0.0.1:8080/healthz
-curl -fsS http://127.0.0.1:8080/version.json
+curl -fsS http://127.0.0.1:8009/healthz
+curl -fsS http://127.0.0.1:8009/version.json
 docker compose ps
 docker compose logs --tail=100 haproxy-analytics
 ```

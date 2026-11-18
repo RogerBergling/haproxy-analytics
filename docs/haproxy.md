@@ -156,7 +156,7 @@ frontend fe_analytics
 backend bk_analytics
     mode http
     option forwardfor
-    server analytics 127.0.0.1:8080 check
+    server analytics 127.0.0.1:8009 check
 ```
 
 Set `TRUSTED_PROXIES` in `.env` to the address HAProxy uses when connecting to
@@ -256,7 +256,7 @@ snapshot warnings instead.
 | GoAccess rejects the log | Custom `log-format` does not match the bundled GoAccess config | Mount a matching GoAccess config and set `GOACCESS_CONFIG`. |
 | Viewer IP is always the proxy | `X-Forwarded-For` is not sent or the peer is not trusted | Add `option forwardfor` and set `TRUSTED_PROXIES`. |
 | TLS passthrough shows no URLs | Traffic is encrypted end to end | Expected. Only SNI metadata is visible. |
-| 503 from the dashboard backend | App not running or wrong port | Check `docker compose ps` and `curl http://127.0.0.1:8080/healthz`. |
+| 503 from the dashboard backend | App not running or wrong port | Check `docker compose ps` and `curl http://127.0.0.1:8009/healthz`. |
 | Auth loop or 401 | Wrong userlist/hash, or auth applied to health checks | Check the HAProxy logs; exclude health checks if needed. |
 
 ## 7. Minimal examples

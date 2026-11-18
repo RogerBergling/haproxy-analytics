@@ -11,9 +11,9 @@ docker compose up -d
 docker compose ps
 docker compose logs --tail=100 haproxy-analytics
 
-curl -fsS http://127.0.0.1:8080/healthz
-curl -fsS http://127.0.0.1:8080/version.json
-curl -fsS http://127.0.0.1:8080/api/whoami
+curl -fsS http://127.0.0.1:8009/healthz
+curl -fsS http://127.0.0.1:8009/version.json
+curl -fsS http://127.0.0.1:8009/api/whoami
 ```
 
 `/healthz` returns 200 after the first successful snapshot. Warnings about a
@@ -184,8 +184,8 @@ unique-IP or unique-path set still costs memory. Monitor the container and raise
 ## Health, version and logs
 
 ```bash
-curl -fsS http://127.0.0.1:8080/healthz | python3 -m json.tool
-curl -fsS http://127.0.0.1:8080/version.json | python3 -m json.tool
+curl -fsS http://127.0.0.1:8009/healthz | python3 -m json.tool
+curl -fsS http://127.0.0.1:8009/version.json | python3 -m json.tool
 docker compose logs -f --tail=200 haproxy-analytics
 docker stats haproxy-analytics
 ```

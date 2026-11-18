@@ -40,7 +40,7 @@ mkdir -p logs geoip
 docker compose up -d
 ```
 
-Open <http://127.0.0.1:8080>. In production, put HAProxy in front of that port for TLS and authentication. See [docs/deployment.md](docs/deployment.md) and [docs/haproxy.md](docs/haproxy.md).
+Open <http://127.0.0.1:8009>. In production, put HAProxy in front of that port for TLS and authentication. See [docs/deployment.md](docs/deployment.md) and [docs/haproxy.md](docs/haproxy.md).
 
 The published image is:
 
@@ -59,7 +59,7 @@ echo "$CR_PAT" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
 ### Try it without logs
 
 ```bash
-docker run --rm -p 127.0.0.1:8080:8080 \
+docker run --rm -p 127.0.0.1:8009:8080 \
   -e DEMO_MODE=true -e HAPROXY_LOG_FILE= \
   --read-only --cap-drop=ALL \
   --security-opt=no-new-privileges:true \
@@ -132,7 +132,7 @@ Copy [`.env.example`](.env.example) to `.env`. The most important settings:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `APP_BIND` | `127.0.0.1` | Host interface used by Compose. Keep loopback unless HAProxy is on the same host and you understand the exposure. |
-| `APP_PORT` | `8080` | Published dashboard port. |
+| `APP_PORT` | `8009` | Published host port. The container always listens on 8080 internally. |
 | `HAPROXY_LOG_DIR` | `./logs` | Host directory containing the log. Mounted read-only. |
 | `HAPROXY_LOG_FILE` | `/logs/haproxy.log` | Log path inside the container. Empty disables file mode. |
 | `REFRESH_SECONDS` | `60` | Snapshot rebuild interval. |
@@ -151,7 +151,7 @@ The full reference is in [docs/deployment.md](docs/deployment.md). Never commit 
 ## Security model
 
 - **No built-in login.** HAProxy must terminate TLS and authenticate the dashboard.
-- **Loopback by default.** Compose publishes `127.0.0.1:8080`, not a public interface.
+- **Loopback by default.** Compose publishes `127.0.0.1:8009`, not a public interface.
 - **Read-only container.** Non-root user, read-only root filesystem, all capabilities dropped, `no-new-privileges`, small `/tmp` tmpfs.
 - **No third-party browser requests.** No CDN, external fonts, analytics, map tiles or IP-lookup service. A strict CSP blocks outbound connections.
 - **A local GeoIP lookup.** MaxMind databases are mounted files; client IPs are never sent to MaxMind or anyone else.
