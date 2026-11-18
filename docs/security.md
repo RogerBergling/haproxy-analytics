@@ -207,6 +207,23 @@ disabled. Highlighting a masked group would match several different clients.
 Set `MASK_INTERNAL_IPS=false` only when raw internal IPs are required for
 analysis and the dashboard access is tightly controlled.
 
+Additional networks can be masked even when they are public. For example:
+
+```dotenv
+MASK_NETWORKS=192.0.0.0/8,172.0.0.0/8
+```
+
+The configured network prefix controls the mask:
+
+```text
+192.0.0.0/8   -> 192.x.x.x
+172.0.0.0/8   -> 172.x.x.x
+192.0.2.0/24  -> 192.0.2.x
+```
+
+`MASK_NETWORKS` works with `MASK_INTERNAL_IPS=false` if you want to mask only
+the listed ranges and leave all other addresses unchanged.
+
 ## GeoIP privacy
 
 MaxMind GeoLite2 lookups are local file reads. Client IP addresses are not sent

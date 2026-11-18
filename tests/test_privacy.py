@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import unittest
 
 from haproxy_analytics.privacy import is_internal_ip, mask_http_line, mask_ip, mask_text_ips
@@ -34,6 +35,30 @@ class PrivacyTests(unittest.TestCase):
     def test_invalid_value_is_returned(self) -> None:
         self.assertFalse(is_internal_ip("not-an-ip"))
         self.assertEqual(mask_ip("not-an-ip"), "not-an-ip")
+
+    def test_configured_networks_are_masked_with_their_prefix(self) -> None:
+        networks = (
+            ipaddress.ip_network("192.0.0.0/8"),
+            ipaddress.ip_network("172.0.0.0/8"),
+        )
+        self.assertEqual(mask_ip("192.0.2.10", networks), "192.x.x.x")
+        self.assertEqual(mask_ip("172.0.0.5", networks), "172.x.x.x")
+        self.assertEqual(mask_ip("8.8.8.8", networks), "8.8.8.8")
+        self.assertEqual(
+            mask_text_ips("http://192.0.2.10/admin", networks),
+            "http://192.x.x.x/admin",
+        )
+
+    def test_configured_networks_work_without_non_global_masking(self) -> None:
+        networks = (ipaddress.ip_network("192.0.0.0/8"),)
+        self.assertEqual(
+            mask_ip("192.0.2.10", networks, mask_non_global=False),
+            "192.x.x.x",
+        )
+        self.assertEqual(
+            mask_ip("198.51.100.20", networks, mask_non_global=False),
+            "198.51.100.20",
+        )
 
     def test_http_log_line_is_masked(self) -> None:
         self.assertEqual(

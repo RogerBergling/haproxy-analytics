@@ -154,6 +154,44 @@ class SnapshotTests(unittest.TestCase):
         self.assertNotIn("192.0.2.20", payload)
         self.assertNotIn("192.0.2.30", payload)
 
+
+    def test_configured_networks_are_masked(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            log = temp_path / "haproxy.log"
+            log.write_text(
+                'Nov 18 00:00:00 demo haproxy[1]: 192.0.2.10:1234 '
+                '[18/Nov/2026:00:00:00.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
+                '"GET /one HTTP/1.1"\n'
+                'Nov 18 00:00:01 demo haproxy[1]: 172.0.0.5:1235 '
+                '[18/Nov/2026:00:00:01.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
+                '"GET /two HTTP/1.1"\n'
+                'Nov 18 00:00:02 demo haproxy[1]: 8.8.8.8:1236 '
+                '[18/Nov/2026:00:00:02.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
+                '"GET /three HTTP/1.1"\n',
+                encoding="utf-8",
+            )
+            settings = demo_settings(
+                temp_path,
+                demo=False,
+                log_file=log,
+                mask_internal_ips=False,
+                mask_networks=(
+                    ipaddress.ip_network("192.0.0.0/8"),
+                    ipaddress.ip_network("172.0.0.0/8"),
+                ),
+            )
+            service = SnapshotService(settings)
+            service.refresh_once()
+            snapshot = service.snapshot()
+
+        ips = {row["ip"] for row in snapshot["visitors"]["rows"]}
+        self.assertEqual(ips, {"192.x.x.x", "172.x.x.x", "8.8.8.8"})
+        self.assertTrue(snapshot["visitors"]["masked"])
+        payload = json.dumps(snapshot)
+        self.assertNotIn("192.0.2.10", payload)
+        self.assertNotIn("172.0.0.5", payload)
+
     def test_missing_log_file_is_not_fatal(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             settings = demo_settings(Path(temp), demo=False, log_file=Path(temp) / "missing.log")

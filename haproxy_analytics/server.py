@@ -14,7 +14,7 @@ from urllib.parse import unquote, urlsplit
 
 from .config import Settings
 from .logsource import normalize_ip
-from .privacy import is_internal_ip, mask_ip
+from .privacy import mask_ip, should_mask
 from .snapshot import SnapshotService
 from .version import version_info
 
@@ -231,9 +231,17 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
 
     def _serve_whoami(self, *, head_only: bool = False) -> None:
         ip = self._client_ip()
-        masked = bool(self.settings.mask_internal_ips and is_internal_ip(ip))
+        enabled = self.settings.mask_internal_ips or bool(self.settings.mask_networks)
+        masked = bool(
+            enabled
+            and should_mask(
+                ip,
+                self.settings.mask_networks,
+                self.settings.mask_internal_ips,
+            )
+        )
         if masked:
-            ip = mask_ip(ip)
+            ip = mask_ip(ip, self.settings.mask_networks, self.settings.mask_internal_ips)
         self._send_json({"ip": ip, "masked": masked}, head_only=head_only)
 
     def _serve_health(self, *, head_only: bool = False) -> None:

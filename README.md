@@ -139,6 +139,7 @@ Copy [`.env.example`](.env.example) to `.env`. The most important settings:
 | `REFRESH_SECONDS` | `60` | Snapshot rebuild interval. |
 | `MAX_LOG_BYTES` | `33554432` | Tail window read from the log file. |
 | `MASK_INTERNAL_IPS` | `true` | Mask non-global client IPs (private, loopback, documentation) in the dashboard and API. Public IPs remain visible. |
+| `MASK_NETWORKS` | empty | Additional CIDRs to mask even if public, for example `192.0.0.0/8,172.0.0.0/8`. |
 | `GEOIP_DIR` | `./geoip` | Host directory containing `GeoLite2-*.mmdb`. |
 | `GEOIP_CITY_DB` / `GEOIP_ASN_DB` | `/geoip/...` | Database paths inside the container. |
 | `TRUSTED_PROXIES` | empty | Comma-separated proxy IPs/CIDRs allowed to supply `X-Forwarded-For`. |

@@ -31,7 +31,7 @@ def _empty_payload(message: str) -> dict[str, Any]:
             "source": {"file": {"exists": False}, "syslog": {"enabled": False}},
             "geoip": {"city": False, "asn": False},
             "goaccess": {"enabled": False, "available": False, "generated": False, "error": None},
-            "privacy": {"mask_internal_ips": True},
+            "privacy": {"mask_internal_ips": True, "mask_networks": []},
             "parser": {"unparsed_lines": 0, "repeated_groups": 0, "events": 0},
             "warnings": [message],
             "duration_ms": 0,
@@ -199,6 +199,7 @@ class SnapshotService:
                 geo,
                 self.settings.max_visitor_rows,
                 mask_internal_ips=self.settings.mask_internal_ips,
+                mask_networks=self.settings.mask_networks,
             )
             goaccess_lines: list[str] = []
             goaccess_cap = self.settings.goaccess_max_lines
@@ -218,8 +219,12 @@ class SnapshotService:
                         if remaining > 0:
                             repeat = min(parsed.event.count, remaining)
                             http_message = parsed.http_message
-                            if self.settings.mask_internal_ips:
-                                http_message = mask_http_line(http_message)
+                            if self.settings.mask_internal_ips or self.settings.mask_networks:
+                                http_message = mask_http_line(
+                                    http_message,
+                                    self.settings.mask_networks,
+                                    self.settings.mask_internal_ips,
+                                )
                             goaccess_lines.extend([http_message] * repeat)
             finally:
                 geo.close()
@@ -265,7 +270,10 @@ class SnapshotService:
                     "asn_path": str(self.settings.geoip_asn_db),
                 },
                 "goaccess": goaccess_status,
-                "privacy": {"mask_internal_ips": self.settings.mask_internal_ips},
+                "privacy": {
+                    "mask_internal_ips": self.settings.mask_internal_ips,
+                    "mask_networks": [str(network) for network in self.settings.mask_networks],
+                },
                 "parser": data["parser"],
                 "warnings": warnings,
                 "duration_ms": round((time.monotonic() - started) * 1000, 1),

@@ -7,7 +7,7 @@ from typing import Any
 
 from .geoip import GeoResolver
 from .parser import HttpEvent, ParsedEvent, TlsEvent
-from .privacy import mask_ip, mask_text_ips
+from .privacy import IPNetwork, mask_ip, mask_text_ips
 
 _UNKNOWN_COUNTRIES = {"Unknown", "Private network", "-"}
 
@@ -16,11 +16,17 @@ class Aggregator:
     """Collect counters and per-client details without storing raw log lines."""
 
     def __init__(
-        self, geo: GeoResolver, max_visitor_rows: int = 5000, mask_internal_ips: bool = False
+        self,
+        geo: GeoResolver,
+        max_visitor_rows: int = 5000,
+        mask_internal_ips: bool = False,
+        mask_networks: tuple[IPNetwork, ...] = (),
     ) -> None:
         self.geo = geo
         self.max_visitor_rows = max_visitor_rows
         self.mask_internal_ips = mask_internal_ips
+        self.mask_networks = mask_networks
+        self.masking_enabled = mask_internal_ips or bool(mask_networks)
 
         self.http_total = 0
         self.tls_total = 0
@@ -165,11 +171,11 @@ class Aggregator:
         return [{"name": name, "count": count} for name, count in counter.most_common(limit)]
 
     def _mask_counter(self, counter: Counter[str]) -> Counter[str]:
-        if not self.mask_internal_ips:
+        if not self.masking_enabled:
             return counter
         masked: Counter[str] = Counter()
         for name, count in counter.items():
-            masked[mask_text_ips(name)] += count
+            masked[mask_text_ips(name, self.mask_networks, self.mask_internal_ips)] += count
         return masked
 
     @staticmethod
@@ -184,7 +190,7 @@ class Aggregator:
             count for status, count in self.http_status.items() if status[:1] in {"4", "5"}
         )
         known_sni = Counter({name: count for name, count in self.sni_counts.items() if name != "No SNI"})
-        if self.mask_internal_ips:
+        if self.masking_enabled:
             known_sni = self._mask_counter(known_sni)
         http_backends = self._mask_counter(self.http_backends)
         total_events = self.http_total + self.tls_total
@@ -237,10 +243,10 @@ class Aggregator:
             )
 
         raw_total = len(all_ips)
-        if self.mask_internal_ips:
+        if self.masking_enabled:
             merged: dict[str, dict[str, Any]] = {}
             for row in visitor_rows:
-                display_ip = mask_ip(row["ip"])
+                display_ip = mask_ip(row["ip"], self.mask_networks, self.mask_internal_ips)
                 if display_ip not in merged:
                     merged[display_ip] = {
                         "ip": display_ip,
@@ -351,7 +357,9 @@ class Aggregator:
                     "total": total,
                     "ips": sorted(
                         {
-                            mask_ip(ip) if self.mask_internal_ips else ip
+                            mask_ip(ip, self.mask_networks, self.mask_internal_ips)
+                            if self.masking_enabled
+                            else ip
                             for ip in stats["ips"]
                         }
                     )[:2000],
@@ -361,10 +369,10 @@ class Aggregator:
 
         latest_seen = max(self.ip_last_seen.values(), default="-")
 
-        if self.mask_internal_ips:
+        if self.masking_enabled:
             http_paths: Counter[str] = Counter()
             for name, count in self.http_paths.items():
-                http_paths[mask_text_ips(name)] += count
+                http_paths[mask_text_ips(name, self.mask_networks, self.mask_internal_ips)] += count
         else:
             http_paths = self.http_paths
 
@@ -402,8 +410,12 @@ class Aggregator:
                 "recent": [
                     {
                         "time": when,
-                        "ip": mask_ip(ip) if self.mask_internal_ips else ip,
-                        "sni": mask_text_ips(sni) if self.mask_internal_ips else sni,
+                        "ip": mask_ip(ip, self.mask_networks, self.mask_internal_ips)
+                        if self.masking_enabled
+                        else ip,
+                        "sni": mask_text_ips(sni, self.mask_networks, self.mask_internal_ips)
+                        if self.masking_enabled
+                        else sni,
                         "country": country,
                         "city": city,
                     }
@@ -419,7 +431,7 @@ class Aggregator:
             "visitors": {
                 "total": visitor_total,
                 "raw_total": raw_total,
-                "masked": self.mask_internal_ips,
+                "masked": self.masking_enabled,
                 "rows": visitor_rows,
                 "truncated": visitor_total > len(visitor_rows),
             },

@@ -130,6 +130,47 @@ class ServerTests(unittest.TestCase):
                 self.assertEqual(payload["ip"], "8.8.8.8")
                 self.assertFalse(payload["masked"])
 
+
+    def test_whoami_masks_configured_network(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            settings = demo_settings(
+                Path(temp),
+                mask_internal_ips=False,
+                mask_networks=(ipaddress.ip_network("192.0.0.0/8"),),
+                trusted_proxies=(ipaddress.ip_network("127.0.0.1/32"),),
+            )
+            with running_server(settings) as (port, _service):
+                status, _headers, body = request(
+                    port,
+                    "GET",
+                    "/api/whoami",
+                    headers={"X-Forwarded-For": "192.1.2.3"},
+                )
+                payload = json.loads(body)
+                self.assertEqual(status, 200)
+                self.assertEqual(payload["ip"], "192.x.x.x")
+                self.assertTrue(payload["masked"])
+
+    def test_whoami_leaves_private_ip_unmasked_when_only_networks_are_masked(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            settings = demo_settings(
+                Path(temp),
+                mask_internal_ips=False,
+                mask_networks=(ipaddress.ip_network("192.0.0.0/8"),),
+                trusted_proxies=(ipaddress.ip_network("127.0.0.1/32"),),
+            )
+            with running_server(settings) as (port, _service):
+                status, _headers, body = request(
+                    port,
+                    "GET",
+                    "/api/whoami",
+                    headers={"X-Forwarded-For": "198.51.100.20"},
+                )
+                payload = json.loads(body)
+                self.assertEqual(status, 200)
+                self.assertEqual(payload["ip"], "198.51.100.20")
+                self.assertFalse(payload["masked"])
+
     def test_snapshot_reports_masking(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             settings = demo_settings(Path(temp), mask_internal_ips=True)

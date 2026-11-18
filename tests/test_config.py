@@ -18,6 +18,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.trusted_proxies, ())
         self.assertFalse(settings.goaccess_enabled)
         self.assertTrue(settings.mask_internal_ips)
+        self.assertEqual(settings.mask_networks, ())
 
     def test_empty_log_file_disables_file_source(self) -> None:
         with patch.dict(os.environ, {"HAPROXY_LOG_FILE": ""}, clear=True):
@@ -26,6 +27,23 @@ class ConfigTests(unittest.TestCase):
 
     def test_invalid_syslog_listen(self) -> None:
         with patch.dict(os.environ, {"SYSLOG_LISTEN": "not-a-listen"}, clear=True):
+            with self.assertRaises(ConfigError):
+                Settings.from_env()
+
+    def test_mask_networks(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"MASK_NETWORKS": "192.0.0.0/8,172.0.0.0/8"},
+            clear=True,
+        ):
+            settings = Settings.from_env()
+        self.assertEqual(
+            {str(network) for network in settings.mask_networks},
+            {"192.0.0.0/8", "172.0.0.0/8"},
+        )
+
+    def test_invalid_mask_network(self) -> None:
+        with patch.dict(os.environ, {"MASK_NETWORKS": "not-a-network"}, clear=True):
             with self.assertRaises(ConfigError):
                 Settings.from_env()
 
