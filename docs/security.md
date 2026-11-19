@@ -39,6 +39,7 @@ The main assets are:
   analytics service or telemetry endpoint.
 - It does not write to the log source.
 - It does not send HAProxy runtime-control commands. Live stats are read-only.
+- It does not redact the source log or persistent syslog store; `EXCLUDED_DOMAINS` filters the dashboard/API only.
 - It does not store a database. The optional persistent syslog store writes only to the dedicated `/data` volume.
 - It does not decrypt TLS passthrough traffic.
 
@@ -290,6 +291,35 @@ IPv6  -> x:x:x:x:x:x:x:x
 With a full mask, all masked rows of the same family are grouped into one row.
 Public addresses that are not in `MASK_NETWORKS` remain unchanged.
 
+## Domain exclusion
+
+`EXCLUDED_DOMAINS` is an optional comma-separated list of domains whose events
+are dropped before aggregation. It is intended for applications that place
+secrets in URLs or whose hostnames must not appear in the dashboard.
+
+- TLS/SNI events are matched by SNI.
+- HTTP events are matched by a captured `Host` header or by the host in an
+  absolute request URL.
+- `example.com` matches the domain itself and all subdomains. Matching is
+  case-insensitive; schemes, ports and trailing dots are not part of the
+  configured value.
+- Matching events do not contribute to KPIs, maps, visitors, paths, request
+  rows or the snapshot API.
+
+HTTP matching requires the Host header in the log:
+
+```haproxy
+capture request header Host len 64
+```
+
+**Limitations:** this is not redaction. Raw HAProxy log lines, the optional
+persistent syslog store, rotated files and backups still contain the original
+data. If a URL itself contains a secret, prevent or redact that logging at the
+HAProxy/rsyslog source and apply the same retention rules as the log. See
+[haproxy.md](haproxy.md#excluding-domains) for a source-side ACL example. The
+app reports only the number of configured domains and skipped events, not the
+domain list, in `meta.privacy`.
+
 ## GeoIP privacy
 
 MaxMind GeoLite2 lookups are local file reads. Client IP addresses are not sent
@@ -338,6 +368,9 @@ Operator controls:
 - The app cannot add TLS or authentication to HAProxy's stats protocol. The
   operator must isolate the stats socket with binding, firewall rules or a
   tunnel.
+- Domain exclusion filters the in-memory dashboard/API only. It cannot remove
+  secrets already written to HAProxy logs, rotated files, backups or the
+  persistent syslog store.
 - The self-highlight is an IP comparison, not proof of identity. NAT and proxies
   make one IP represent multiple people.
 

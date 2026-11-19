@@ -3,7 +3,15 @@ from __future__ import annotations
 import ipaddress
 import unittest
 
-from haproxy_analytics.privacy import is_internal_ip, mask_ip, mask_text_ips
+from haproxy_analytics.privacy import (
+    domain_matches,
+    host_from_url,
+    is_internal_ip,
+    mask_ip,
+    mask_text_ips,
+    normalize_domain,
+    normalize_host,
+)
 
 
 class PrivacyTests(unittest.TestCase):
@@ -80,6 +88,34 @@ class PrivacyTests(unittest.TestCase):
             "http://[fd00:1234::x]:8080/admin",
         )
         self.assertEqual(mask_text_ips("http://8.8.8.8/admin"), "http://8.8.8.8/admin")
+
+    def test_normalize_domain(self) -> None:
+        self.assertEqual(normalize_domain("*.Example.COM."), "example.com")
+        self.assertEqual(normalize_domain(".example.org"), "example.org")
+        self.assertEqual(normalize_domain("münchen.example"), "xn--mnchen-3ya.example")
+        with self.assertRaises(ValueError):
+            normalize_domain("https://example.com")
+
+    def test_domain_matching_is_exact_or_subdomain(self) -> None:
+        domains = ("example.com", "example.org")
+        self.assertTrue(domain_matches("example.com", domains))
+        self.assertTrue(domain_matches("app.example.com", domains))
+        self.assertTrue(domain_matches("APP.EXAMPLE.COM:443", domains))
+        self.assertFalse(domain_matches("badexample.com", domains))
+        self.assertFalse(domain_matches("example.com.evil", domains))
+        self.assertFalse(domain_matches("-", domains))
+
+    def test_host_from_url(self) -> None:
+        self.assertEqual(host_from_url("https://app.example.com/path"), "app.example.com")
+        self.assertEqual(host_from_url("http://app.example.com:8080/path"), "app.example.com")
+        self.assertEqual(host_from_url("//app.example.com/path"), "app.example.com")
+        self.assertEqual(host_from_url("/relative/path"), "")
+
+    def test_normalize_host(self) -> None:
+        self.assertEqual(normalize_host("App.Example.COM.:443"), "app.example.com")
+        self.assertEqual(normalize_host("[2001:db8::1]:443"), "[2001:db8::1]")
+        self.assertEqual(normalize_host("MÜNCHEN.example"), "xn--mnchen-3ya.example")
+        self.assertEqual(normalize_host("bad host"), "")
 
 
 if __name__ == "__main__":

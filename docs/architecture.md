@@ -10,7 +10,7 @@ a static browser dashboard, not a log platform.
 | HTTP server | `haproxy_analytics/server.py` | Serves the dashboard, JSON API, health/version endpoints and the token-protected syslog clear endpoint. Applies security headers and method restrictions. |
 | Snapshot service | `haproxy_analytics/snapshot.py` | Reads sources, runs the parser and aggregator, and holds the latest snapshot in memory. |
 | Parser | `haproxy_analytics/parser.py` | Recognises syslog prefixes, HTTP `option httplog` records, SNI records and `message repeated` groups. |
-| Aggregator | `haproxy_analytics/aggregate.py` | Produces counters, per-IP details, country/city statistics and map points. |
+| Aggregator | `haproxy_analytics/aggregate.py` | Produces counters, per-IP details, country/city statistics and map points; drops configured domains before counting. |
 | GeoIP resolver | `haproxy_analytics/geoip.py` | Optional MaxMind City/ASN lookups from local MMDB files. Never performs network lookups. |
 | Log sources | `haproxy_analytics/logsource.py` | Read-only file tail reader, bounded syslog ring buffer and optional UDP/TCP receiver. |
 | Syslog store | `haproxy_analytics/syslog_store.py` | Optional append-only persistent syslog history with size rotation and a clear operation. |
@@ -31,7 +31,7 @@ a static browser dashboard, not a log platform.
                         parser (one line at a time)
                                 │
                                 ▼
-                    aggregator (bounded counters)
+              aggregator (bounded counters, domain filter)
                                 │
               ┌─────────────────┼──────────────────┐
               ▼                 ▼                  ▼
@@ -74,12 +74,30 @@ the error in `/healthz`.
   HAProxy stats socket. It does not consume log data and does not affect the
   snapshot counters.
 
+## Domain exclusion
+
+`EXCLUDED_DOMAINS` is applied in the aggregator before any counters are
+incremented. TLS events match on SNI. HTTP events match on the captured `Host`
+header or the host of an absolute request URL. The match is exact-or-subdomain
+and case-insensitive. Excluded events are not present in the snapshot, visitor
+rows, request rows, paths or map data.
+
+The parser supports the standard `option httplog` format with an optional
+`capture request header Host len 64`. Without that capture, origin-form HTTP
+requests do not contain a domain, so only SNI and absolute-URL matching can
+exclude them.
+
+Raw log lines are never stored in the snapshot. The optional persistent syslog
+store and external log files are not redacted by this filter.
+
 ## Snapshot API
 
 `GET /api/snapshot` returns a JSON object with:
 
 - `meta`: generation time, refresh interval, version, active sources, GeoIP
-  availability, syslog store status, parser statistics and warnings.
+  availability, syslog store status, privacy counts, parser statistics and
+  warnings. `meta.privacy.excluded_domains` and `excluded_events` describe the
+  domain filter without exposing the configured domain list.
 - `kpis`: HTTP requests, TLS connections, unique IPs, countries, 4xx/5xx,
   bandwidth, geolocated points, SNI hostnames and backends.
 - `http`: methods, statuses, status classes, protocols, hourly distribution,
@@ -92,7 +110,7 @@ the error in `/healthz`.
   `MASK_INTERNAL_IPS` is enabled, non-global addresses are masked and rows are
   grouped by their masked prefix; `visitors.masked` and `visitors.raw_total`
   describe the result.
-- `parser`: unparsed line and repeated-group counts.
+- `parser`: unparsed line, repeated-group and excluded-event counts.
 
 The API is same-origin and protected by the same network boundary as the HTML.
 It is not a public API.
@@ -145,7 +163,10 @@ stable disabled payload with HTTP 200.
    at `level user`. The app sends only two whitelisted `show` commands.
 7. **Rendering**: dashboard values are inserted as text nodes and DOM APIs, never
    `innerHTML`. There is no third-party report iframe or chart script.
-8. **Container**: non-root user, read-only root filesystem, no capabilities and
+8. **Domain filter**: configured domains are dropped before aggregation. The
+   filter covers SNI and captured/absolute-URL HTTP hosts; it does not redact
+   raw logs or the persistent syslog store.
+9. **Container**: non-root user, read-only root filesystem, no capabilities and
    `no-new-privileges`.
 
 ## Deliberate omissions

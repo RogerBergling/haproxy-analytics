@@ -207,6 +207,8 @@ def main() -> int:
         fail(".env.example does not document the optional GeoIP account variables", errors)
     if "HAPROXY_STATS_SOCKET" not in env_example:
         fail(".env.example does not document HAPROXY_STATS_SOCKET", errors)
+    if "EXCLUDED_DOMAINS" not in env_example:
+        fail(".env.example does not document EXCLUDED_DOMAINS", errors)
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     for token in ("docker compose", "ghcr.io/rogerbergling/haproxy-analytics", "docs/security.md", "docs/haproxy.md"):

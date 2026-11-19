@@ -12,6 +12,8 @@ import os
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from .privacy import normalize_domain
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PUBLIC_DIR = PROJECT_ROOT / "public"
 DEFAULT_DEMO_LOG = PROJECT_ROOT / "examples" / "demo-haproxy.log"
@@ -68,6 +70,18 @@ def _parse_networks(name: str, values: tuple[str, ...]) -> tuple[IPNetwork, ...]
         except ValueError as exc:
             raise ConfigError(f"{name} contains an invalid network {value!r}: {exc}") from exc
     return tuple(networks)
+
+
+def _parse_domains(name: str, values: tuple[str, ...]) -> tuple[str, ...]:
+    domains: list[str] = []
+    for value in values:
+        try:
+            domain = normalize_domain(value)
+        except ValueError as exc:
+            raise ConfigError(f"{name} contains an invalid domain {value!r}: {exc}") from exc
+        if domain not in domains:
+            domains.append(domain)
+    return tuple(domains)
 
 
 def _parse_listen(value: str) -> tuple[str, int] | None:
@@ -147,6 +161,7 @@ class Settings:
     mask_internal_ips: bool
     mask_networks: tuple[IPNetwork, ...]
     mask_full: bool
+    excluded_domains: tuple[str, ...]
     geoip_city_db: Path
     geoip_asn_db: Path
     trusted_proxies: tuple[IPNetwork, ...]
@@ -217,6 +232,9 @@ class Settings:
 
         stats_socket = _env("HAPROXY_STATS_SOCKET")
         stats_endpoint = _parse_host_port("HAPROXY_STATS_SOCKET", stats_socket)
+        excluded_domains = _parse_domains(
+            "EXCLUDED_DOMAINS", _env_csv("EXCLUDED_DOMAINS")
+        )
 
         app_port = _env_int("APP_PORT", 8080, 1)
         if app_port > 65535:
@@ -236,6 +254,7 @@ class Settings:
             mask_internal_ips=_env_bool("MASK_INTERNAL_IPS", True),
             mask_networks=_parse_networks("MASK_NETWORKS", _env_csv("MASK_NETWORKS")),
             mask_full=_env_bool("MASK_FULL", False),
+            excluded_domains=excluded_domains,
             geoip_city_db=_resolve_path(_env("GEOIP_CITY_DB"), Path("/geoip/GeoLite2-City.mmdb")),
             geoip_asn_db=_resolve_path(_env("GEOIP_ASN_DB"), Path("/geoip/GeoLite2-ASN.mmdb")),
             trusted_proxies=trusted,

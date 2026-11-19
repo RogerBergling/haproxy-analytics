@@ -19,6 +19,7 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(settings.mask_internal_ips)
         self.assertEqual(settings.mask_networks, ())
         self.assertFalse(settings.mask_full)
+        self.assertEqual(settings.excluded_domains, ())
         self.assertIsNone(settings.syslog_store_file)
 
     def test_empty_log_file_disables_file_source(self) -> None:
@@ -42,6 +43,22 @@ class ConfigTests(unittest.TestCase):
             {str(network) for network in settings.mask_networks},
             {"192.0.0.0/8", "172.0.0.0/8"},
         )
+
+    def test_excluded_domains(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"EXCLUDED_DOMAINS": "*.Example.COM., .example.org, example.com"},
+            clear=True,
+        ):
+            settings = Settings.from_env()
+        self.assertEqual(settings.excluded_domains, ("example.com", "example.org"))
+
+    def test_invalid_excluded_domain(self) -> None:
+        for value in ("https://example.com", "example.com/path", "user@example.com", "."):
+            with self.subTest(value=value):
+                with patch.dict(os.environ, {"EXCLUDED_DOMAINS": value}, clear=True):
+                    with self.assertRaises(ConfigError):
+                        Settings.from_env()
 
     def test_max_request_rows(self) -> None:
         with patch.dict(os.environ, {"MAX_REQUEST_ROWS": "25"}, clear=True):

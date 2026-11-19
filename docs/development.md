@@ -103,6 +103,8 @@ The test suite covers:
 - UDP/TCP receiver allowlists, size limits and TCP TLS;
 - live stats parsing, response-size limits, row caps, failure fallback and
   omission of server addresses;
+- domain normalization/matching, captured Host parsing and exclusion before
+  aggregation;
 - HTTP detail counters, protocol/status classes, request rows and per-IP row caps;
 - internal IP masking, masked visitor grouping and capped individual request rows;
 - persistent syslog store append, rotation, clear and API token checks;
@@ -137,9 +139,12 @@ When adding a format:
 1. Add a focused parser test with a synthetic line.
 2. Keep the standard HTTP and TLS formats working.
 3. Decide how the new fields affect counts, visitor rows and HTTP detail tables.
-4. Update `docs/operations.md` and the demo log if it is a supported public
+4. Keep optional captures such as `capture request header Host len 64` working
+   with and without the capture block; domain exclusion depends on it for
+   origin-form HTTP requests.
+5. Update `docs/operations.md` and the demo log if it is a supported public
    example.
-5. Do not log credentials, private addresses or real hostnames in tests.
+6. Do not log credentials, private addresses or real hostnames in tests.
 
 ## Adding configuration
 

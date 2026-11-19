@@ -8,7 +8,7 @@ from typing import Any
 
 from .geoip import GeoResolver
 from .parser import HttpEvent, ParsedEvent, TlsEvent
-from .privacy import IPNetwork, mask_ip, mask_text_ips
+from .privacy import IPNetwork, domain_matches, host_from_url, mask_ip, mask_text_ips
 
 _UNKNOWN_COUNTRIES = {"Unknown", "Private network", "-"}
 
@@ -42,6 +42,7 @@ class Aggregator:
         mask_internal_ips: bool = False,
         mask_networks: tuple[IPNetwork, ...] = (),
         mask_full: bool = False,
+        excluded_domains: tuple[str, ...] = (),
     ) -> None:
         self.geo = geo
         self.max_visitor_rows = max_visitor_rows
@@ -50,6 +51,7 @@ class Aggregator:
         self.mask_networks = mask_networks
         self.mask_full = mask_full
         self.masking_enabled = mask_internal_ips or bool(mask_networks)
+        self.excluded_domains = excluded_domains
 
         self.http_total = 0
         self.tls_total = 0
@@ -57,6 +59,7 @@ class Aggregator:
         self.unparsed_lines = 0
         self.parsed_events = 0
         self.repeated_groups = 0
+        self.excluded_events = 0
 
         self.http_by_ip: Counter[str] = Counter()
         self.tls_by_ip: Counter[str] = Counter()
@@ -148,11 +151,25 @@ class Aggregator:
         point[kind] += count
         point["ips"].add(ip)
 
+    def _http_is_excluded(self, event: HttpEvent) -> bool:
+        if not self.excluded_domains:
+            return False
+        if any(domain_matches(host, self.excluded_domains) for host in event.hosts):
+            return True
+        url_host = host_from_url(event.path)
+        return bool(url_host and domain_matches(url_host, self.excluded_domains))
+
     def add(self, parsed: ParsedEvent) -> None:
         event = parsed.event
         if isinstance(event, TlsEvent):
+            if domain_matches(event.sni, self.excluded_domains):
+                self.excluded_events += event.count
+                return
             self._add_tls(event)
         elif isinstance(event, HttpEvent):
+            if self._http_is_excluded(event):
+                self.excluded_events += event.count
+                return
             self._add_http(event)
 
     def _add_tls(self, event: TlsEvent) -> None:
@@ -664,6 +681,7 @@ class Aggregator:
                 "unparsed_lines": self.unparsed_lines,
                 "repeated_groups": self.repeated_groups,
                 "events": self.parsed_events,
+                "excluded_events": self.excluded_events,
             },
         }
 

@@ -46,7 +46,7 @@ frontend fe_https
     bind *:443 ssl crt /etc/haproxy/certs/example.com.pem alpn h2,http/1.1
     mode http
     option httplog
-    # Optional: capture the Host header if you want it in a custom format.
+    # Required for HTTP EXCLUDED_DOMAINS matching. Harmless otherwise.
     capture request header Host len 64
     default_backend bk_web
 
@@ -79,6 +79,48 @@ A standard record looks like:
 The app reads the client address, timestamp, frontend, backend, status, bytes,
 method, path and protocol. It does not require a specific frontend or backend
 name.
+
+### Excluding domains
+
+Set `EXCLUDED_DOMAINS` on the analytics host to keep sensitive applications out
+of the dashboard and API:
+
+```dotenv
+EXCLUDED_DOMAINS=private.example.com,secret.example.org
+```
+
+The value is a comma-separated list. A domain matches itself and all
+subdomains. TLS/SNI events are matched by their SNI value. HTTP events are
+matched by a captured `Host` header or by the host in an absolute request URL.
+
+For HTTP matching, capture the Host header in the HTTP frontend:
+
+```haproxy
+frontend fe_https
+    mode http
+    option httplog
+    capture request header Host len 64
+```
+
+Without the capture, standard origin-form requests (`GET /path HTTP/1.1`) do
+not contain a domain, so HTTP exclusion cannot identify them. SNI filtering
+still works for the TCP frontend.
+
+This filters the dashboard/API only. It does not redact raw logs or the
+persistent syslog store. If a URL contains a secret, also prevent or redact
+that logging at the HAProxy/rsyslog source. One option is an HAProxy ACL with a
+source-side logging suppression:
+
+```haproxy
+# Match the apex and subdomains; repeat the ACL lines for each domain.
+acl sensitive_domain req.hdr(host),host_only -i private.example.com
+acl sensitive_domain req.hdr(host),host_only -i -m end .private.example.com
+http-request set-log-level silent if sensitive_domain
+```
+
+Validate the exact ACL against your HAProxy version and configuration before
+reloading. Suppressing new logs does not remove existing log lines; rotate and
+apply retention to files that already contain the data.
 
 ## 2. TLS passthrough with SNI capture
 
@@ -310,6 +352,7 @@ snapshot warnings instead.
 | No HTTP requests in the app | Frontend is `mode tcp`, or `option httplog` is missing | Use HTTP mode and `option httplog` on the terminating frontend. |
 | HTTP details are empty | Frontend is `mode tcp`, or `option httplog` is missing | Use HTTP mode and `option httplog` on the terminating frontend. |
 | Viewer IP is always the proxy | `X-Forwarded-For` is not sent or the peer is not trusted | Add `option forwardfor` and set `TRUSTED_PROXIES`. |
+| HTTP domain exclusion does nothing | Host header is not captured and the request target is origin-form | Add `capture request header Host len 64` to the HTTP frontend. |
 | Live stats show `offline` | Wrong host/port, firewall, HAProxy not reloaded or socket not bound | Test with `socat` from the analytics host; check the stats socket line and firewall. |
 | Live stats are empty/disabled | `HAPROXY_STATS_SOCKET` is empty or invalid | Set the private `host:port` in `.env`, recreate the container and check `/api/live`. |
 | TLS passthrough shows no URLs | Traffic is encrypted end to end | Expected. Only SNI metadata is visible. |

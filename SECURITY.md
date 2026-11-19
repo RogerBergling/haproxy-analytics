@@ -54,6 +54,8 @@ it, its screenshots, exports and browser history as sensitive data.
   chart library or external script.
 - The optional Live stats view connects only to an operator-configured stats
   socket, sends only `show info;show stat`, and omits internal server addresses.
+- The optional domain filter drops configured HTTP/TLS events before
+  aggregation. It is an application-level filter, not log redaction.
 - The container runs as a non-root user with a read-only root filesystem, all
   Linux capabilities dropped and `no-new-privileges`.
 - CI runs unit tests, repository verification, an HTTP smoke test, a secret
@@ -81,7 +83,10 @@ it, its screenshots, exports and browser history as sensitive data.
    untrusted network.
 6. Keep the live stats socket at `level user`, bound to a private interface,
    and firewalled to the analytics host only.
-7. Do not commit logs, `.env`, GeoIP databases, certificates or real HAProxy
+7. Set `EXCLUDED_DOMAINS` for sensitive applications and capture the Host
+   header for HTTP matching. Remember that this filters the app, not the raw
+   log or persistent syslog store.
+8. Do not commit logs, `.env`, GeoIP databases, certificates or real HAProxy
    configurations.
-8. Review the dashboard access logs and retention policy with the same care as
+9. Review the dashboard access logs and retention policy with the same care as
    the HAProxy logs themselves.

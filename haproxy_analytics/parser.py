@@ -17,6 +17,8 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 
+from .privacy import normalize_host
+
 SYSLOG_TIMESTAMP = re.compile(
     r"^(?P<ts>[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+"
 )
@@ -47,6 +49,7 @@ HTTP_SIMPLE = re.compile(
 )
 QUOTED_REQUEST = re.compile(r'"([^"]*)"')
 REQUEST = re.compile(r"^(?P<method>[A-Z]+)\s+(?P<path>\S+)\s+(?P<protocol>HTTP/\S+)")
+CAPTURE_GROUP = re.compile(r"\{([^{}]*)\}")
 
 
 @dataclass(frozen=True)
@@ -74,6 +77,7 @@ class HttpEvent:
     count: int = 1
     client_port: str = "-"
     server: str = "-"
+    hosts: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -150,6 +154,46 @@ def _clean_name(value: str) -> str:
     return value.rstrip("~")
 
 
+def _looks_like_host(value: str) -> bool:
+    if not value:
+        return False
+    if value.startswith("[") and value.endswith("]"):
+        try:
+            ipaddress.ip_address(value[1:-1])
+        except ValueError:
+            return False
+        return True
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return "." in value
+    return True
+
+
+def _captured_hosts(rest: str) -> tuple[str, ...]:
+    """Extract captured header values that look like a Host.
+
+    HAProxy logs captured request headers in the first brace group before the
+    request. The common setup is ``capture request header Host len 64``.
+    Multiple request captures are separated by ``|``. We accept every plausible
+    hostname or address in that group so the Host capture does not have to be
+    the first one; unrelated captures are ignored when they do not look like a
+    host.
+    """
+
+    quoted = QUOTED_REQUEST.search(rest)
+    capture_text = rest[: quoted.start()] if quoted else rest
+    groups = CAPTURE_GROUP.findall(capture_text)
+    if not groups:
+        return ()
+    hosts: list[str] = []
+    for candidate in groups[0].split("|"):
+        host = normalize_host(candidate)
+        if host and _looks_like_host(host) and host not in hosts:
+            hosts.append(host)
+    return tuple(hosts)
+
+
 def _request_parts(rest: str) -> tuple[str, str, str]:
     quoted = QUOTED_REQUEST.search(rest)
     request = quoted.group(1) if quoted else " ".join(rest.split()[:3])
@@ -177,7 +221,8 @@ def _parse_event(message: str, count: int, syslog_time: str | None) -> ParsedEve
         match = pattern.match(message)
         if not match:
             continue
-        method, path, protocol = _request_parts(match.group("rest"))
+        rest = match.group("rest")
+        method, path, protocol = _request_parts(rest)
         bytes_text = match.group("bytes")
         backend_name, _, server_name = match.group("backend").partition("/")
         return ParsedEvent(
@@ -195,6 +240,7 @@ def _parse_event(message: str, count: int, syslog_time: str | None) -> ParsedEve
                 count=count,
                 client_port=match.group("port"),
                 server=_clean_name(server_name) or "-",
+                hosts=_captured_hosts(rest),
             )
         )
     return None

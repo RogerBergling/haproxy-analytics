@@ -1134,6 +1134,19 @@ function renderWarnings() {
   showAlert(`${shown}${suffix}`, "warn");
 }
 
+function renderDomainFilter() {
+  const node = $("#domain-filter-status");
+  if (!node || !state.snapshot) return;
+  const privacy = (state.snapshot.meta && state.snapshot.meta.privacy) || {};
+  const domains = Number(privacy.excluded_domains) || 0;
+  const events = Number(privacy.excluded_events) || 0;
+  if (!domains) {
+    node.textContent = "No domains are excluded. Set EXCLUDED_DOMAINS to a comma-separated list to drop matching HTTP and TLS events before aggregation.";
+    return;
+  }
+  node.textContent = `${fmt(domains)} domain(s) excluded from HTTP/TLS aggregation. ${fmt(events)} event(s) skipped in this snapshot. HTTP matching uses a captured Host header or an absolute URL. Raw log lines and the persistent syslog store are not redacted.`;
+}
+
 function renderSyslogStore() {
   const status = $("#syslog-store-status");
   const button = $("#clear-syslog-button");
@@ -1202,6 +1215,7 @@ function renderAll() {
   renderYouBanners();
   renderServerCard();
   renderWarnings();
+  renderDomainFilter();
   renderSyslogStore();
 }
 

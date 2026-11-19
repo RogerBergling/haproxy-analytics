@@ -81,6 +81,7 @@ uses the shell environment or CLI flags, not `.env` automatically.
 | `MASK_INTERNAL_IPS` | `true` | Mask non-global client IPs (private, loopback, documentation) in the dashboard and API. Public IPs remain visible. |
 | `MASK_NETWORKS` | empty | Additional CIDRs to mask even if public, for example `192.0.0.0/8,172.0.0.0/8`. |
 | `MASK_FULL` | `false` | Use one full mask (`x.x.x.x` / `x:x:x:x:x:x:x:x`) instead of prefix masks. |
+| `EXCLUDED_DOMAINS` | empty | Comma-separated domains to drop before aggregation. Matches the domain and all subdomains. HTTP matching needs a captured Host header. |
 | `GEOIP_DIR` | `./geoip` | Host directory mounted at `/geoip` read-only. |
 | `GEOIP_CITY_DB` | `/geoip/GeoLite2-City.mmdb` | City database path inside the container. |
 | `GEOIP_ASN_DB` | `/geoip/GeoLite2-ASN.mmdb` | ASN database path inside the container. |
@@ -193,6 +194,53 @@ addresses.
 If `MASK_NETWORKS` contains `192.0.0.0/8` or `172.0.0.0/8`, those ranges stay
 masked even when `MASK_INTERNAL_IPS=false`. Remove or narrow the list to see
 those addresses.
+
+### Domain exclusion
+
+Use `EXCLUDED_DOMAINS` when an application places secrets in URLs or when a
+domain should not appear in the dashboard at all:
+
+```dotenv
+EXCLUDED_DOMAINS=private.example.com,secret.example.org
+```
+
+Matching rules:
+
+- multiple domains are comma-separated;
+- matching is case-insensitive;
+- `example.com` matches `example.com` and every subdomain such as
+  `app.example.com`;
+- a leading `.` or `*.` is accepted and normalized;
+- do not include a scheme, path, port or credentials.
+
+The filter is applied before aggregation, so matching events do not contribute
+to KPIs, maps, visitors, paths, requests or the API. TLS/SNI events are matched
+by SNI. HTTP events are matched by:
+
+1. the captured `Host` header, if present in the log; or
+2. the host of an absolute request URL such as
+   `https://private.example.com/callback`.
+
+For HTTP domain exclusion, capture the Host header in the HAProxy frontend:
+
+```haproxy
+frontend fe_https
+    mode http
+    option httplog
+    capture request header Host len 64
+```
+
+The parser accepts logs with or without the capture. Without it, ordinary
+origin-form requests (`GET /path HTTP/1.1`) cannot be attributed to a domain.
+
+> **Important:** this is an application-level filter. It does not redact the
+> raw HAProxy log, the optional persistent syslog store or existing backups. If
+> the URL itself contains a secret, also prevent or redact that logging at the
+> HAProxy/rsyslog source and apply your retention policy. See
+> [haproxy.md](haproxy.md#excluding-domains) for a source-side ACL example.
+
+The current count of excluded domains and skipped events is shown in the
+**Security & privacy** tab and in `meta.privacy` on `/api/snapshot`.
 
 ### Syslog receiver
 
@@ -403,6 +451,7 @@ CLI flags override the corresponding environment values.
 | Syslog buffer empty | Is `SYSLOG_LISTEN` set to `0.0.0.0:5514`, the Compose syslog port reachable and the sender allowlisted? Check the container logs and the health JSON. |
 | Live stats show `offline` | Is `HAPROXY_STATS_SOCKET` reachable from the container? Test with `socat` from the analytics host and check the HAProxy firewall and stats socket bind. |
 | Live stats disabled | Set `HAPROXY_STATS_SOCKET` to the private `host:port` and recreate the container. Empty disables the view intentionally. |
+| Excluded domain still appears | Check `meta.privacy.excluded_events`; for HTTP, capture `Host` in HAProxy. The filter does not redact raw logs or the syslog store. |
 | Viewer IP is the proxy | Set `TRUSTED_PROXIES` to the HAProxy address and ensure HAProxy sends `X-Forwarded-For`. |
 | 403/404 from HAProxy | Check the dashboard hostname, auth userlist and backend address. |
 | Container restarts | Check `docker compose logs`; a bad `SYSLOG_LISTEN`, TLS pair or port conflict fails fast. |

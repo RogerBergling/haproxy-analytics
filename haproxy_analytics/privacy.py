@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import ipaddress
 import re
+from urllib.parse import urlsplit
 
 IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
+
+_DOMAIN_LABEL = re.compile(r"^[a-z0-9_-]+$")
+_HOST_FORBIDDEN = set(" /\\@?#|,")
 
 _IPV4 = re.compile(r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])")
 _IPV6_BRACKET = re.compile(r"\[([0-9A-Fa-f:]{2,})\](?::(\d+))?")
@@ -14,6 +18,100 @@ _FULL_MASK = {
     4: "x.x.x.x",
     6: "x:x:x:x:x:x:x:x",
 }
+
+
+def normalize_domain(value: str) -> str:
+    """Normalize one excluded domain for exact-or-subdomain matching.
+
+    Accepts ``example.com``, ``.example.com`` and ``*.example.com``. The
+    returned value is lower-case ASCII/Punycode with no leading wildcard or
+    trailing dot. Invalid values raise ``ValueError``.
+    """
+
+    text = value.strip().lower()
+    if text.startswith("*."):
+        text = text[2:]
+    elif text.startswith("."):
+        text = text[1:]
+    text = text.rstrip(".")
+    if not text:
+        raise ValueError("empty domain")
+    try:
+        text = text.encode("idna").decode("ascii")
+    except UnicodeError as exc:
+        raise ValueError(f"invalid internationalized domain: {value!r}") from exc
+    if len(text) > 253:
+        raise ValueError(f"domain is too long: {value!r}")
+    for label in text.split("."):
+        if not label or len(label) > 63:
+            raise ValueError(f"invalid domain label: {value!r}")
+        if label.startswith("-") or label.endswith("-"):
+            raise ValueError(f"invalid domain label: {value!r}")
+        if not _DOMAIN_LABEL.fullmatch(label):
+            raise ValueError(f"invalid domain: {value!r}")
+    return text
+
+
+def normalize_host(value: str | None) -> str:
+    """Normalize a Host header, SNI name or URL host for domain matching."""
+
+    if value is None:
+        return ""
+    text = value.strip().strip('"').lower()
+    if not text or text == "-":
+        return ""
+    if text.startswith("["):
+        closing = text.find("]")
+        if closing < 0:
+            return ""
+        address = text[1:closing]
+        try:
+            ipaddress.ip_address(address)
+        except ValueError:
+            return ""
+        return f"[{address}]"
+    if text.count(":") == 1:
+        host, _, port = text.rpartition(":")
+        if port.isdigit():
+            text = host
+    text = text.rstrip(".")
+    if not text or any(character in _HOST_FORBIDDEN for character in text):
+        return ""
+    if any(ord(character) > 127 for character in text):
+        try:
+            text = text.encode("idna").decode("ascii")
+        except UnicodeError:
+            return ""
+    return text
+
+
+def host_from_url(value: str) -> str:
+    """Return the normalized host from an absolute or scheme-relative URL."""
+
+    text = value.strip()
+    if text.startswith("//"):
+        text = "http:" + text
+    if not text.startswith(("http://", "https://")):
+        return ""
+    try:
+        parsed = urlsplit(text)
+    except ValueError:
+        return ""
+    return normalize_host(parsed.hostname)
+
+
+def domain_matches(host: str | None, domains: tuple[str, ...]) -> bool:
+    """Return True when ``host`` is a configured domain or its subdomain."""
+
+    if not domains:
+        return False
+    normalized = normalize_host(host)
+    if not normalized:
+        return False
+    for domain in domains:
+        if normalized == domain or normalized.endswith(f".{domain}"):
+            return True
+    return False
 
 
 def _match_network(

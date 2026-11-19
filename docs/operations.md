@@ -61,6 +61,29 @@ If `meta.connected` is false, check the endpoint, firewall, HAProxy stats socket
 bind and the HAProxy reload. The app reconnects on the next interval and does
 not require a restart after a transient failure.
 
+## Domain exclusion
+
+Use `EXCLUDED_DOMAINS` to drop sensitive applications before aggregation:
+
+```dotenv
+EXCLUDED_DOMAINS=private.example.com,secret.example.org
+```
+
+Check the result:
+
+```bash
+curl -fsS http://127.0.0.1:8009/api/snapshot \
+  | python3 -c 'import json,sys; p=json.load(sys.stdin)["meta"]["privacy"]; print(p["excluded_domains"], p["excluded_events"])'
+```
+
+- SNI matching works for TLS/SNI events.
+- HTTP matching needs `capture request header Host len 64` in the HAProxy
+  frontend, unless the request target is an absolute URL with a host.
+- The filter is exact-or-subdomain and case-insensitive.
+- Excluded events do not appear in KPIs, maps, visitors, paths or request rows.
+- Raw log lines, rotated files and `SYSLOG_STORE_FILE` are not redacted. Use
+  source-side log controls and retention for secrets that must not be written.
+
 ## Parser formats
 
 ### Standard HTTP (`option httplog`)

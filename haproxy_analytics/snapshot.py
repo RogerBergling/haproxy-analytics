@@ -28,8 +28,19 @@ def _empty_payload(message: str) -> dict[str, Any]:
             "demo": False,
             "source": {"file": {"exists": False}, "syslog": {"enabled": False}},
             "geoip": {"city": False, "asn": False},
-            "privacy": {"mask_internal_ips": True, "mask_networks": [], "mask_full": False},
-            "parser": {"unparsed_lines": 0, "repeated_groups": 0, "events": 0},
+            "privacy": {
+                "mask_internal_ips": True,
+                "mask_networks": [],
+                "mask_full": False,
+                "excluded_domains": 0,
+                "excluded_events": 0,
+            },
+            "parser": {
+                "unparsed_lines": 0,
+                "repeated_groups": 0,
+                "events": 0,
+                "excluded_events": 0,
+            },
             "warnings": [message],
             "duration_ms": 0,
         },
@@ -66,7 +77,12 @@ def _empty_payload(message: str) -> dict[str, Any]:
             "rows": [],
             "truncated": False,
         },
-        "parser": {"unparsed_lines": 0, "repeated_groups": 0, "events": 0},
+        "parser": {
+            "unparsed_lines": 0,
+            "repeated_groups": 0,
+            "events": 0,
+            "excluded_events": 0,
+        },
     }
 
 
@@ -218,6 +234,7 @@ class SnapshotService:
                 mask_internal_ips=self.settings.mask_internal_ips,
                 mask_networks=self.settings.mask_networks,
                 mask_full=self.settings.mask_full,
+                excluded_domains=self.settings.excluded_domains,
             )
             try:
                 for line in lines:
@@ -261,6 +278,8 @@ class SnapshotService:
                     "mask_internal_ips": self.settings.mask_internal_ips,
                     "mask_networks": [str(network) for network in self.settings.mask_networks],
                     "mask_full": self.settings.mask_full,
+                    "excluded_domains": len(self.settings.excluded_domains),
+                    "excluded_events": data["parser"]["excluded_events"],
                 },
                 "parser": data["parser"],
                 "warnings": warnings,

@@ -62,6 +62,52 @@ class SnapshotTests(unittest.TestCase):
             )
 
 
+    def test_excluded_domains_drop_matching_http_and_tls_events(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            log = temp_path / "haproxy.log"
+            log.write_text(
+                'Nov 18 00:00:00 demo haproxy[1]: src=203.0.113.10 '
+                'dst=198.51.100.10:443 sni=private.example.com\n'
+                'Nov 18 00:00:01 demo haproxy[1]: src=203.0.113.11 '
+                'dst=198.51.100.10:443 sni=public.example.com\n'
+                'Nov 18 00:00:02 demo haproxy[1]: 203.0.113.12:1234 '
+                '[18/Nov/2026:00:00:02.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
+                '{private.example.com} {} "GET /login?token=secret HTTP/1.1"\n'
+                'Nov 18 00:00:03 demo haproxy[1]: 203.0.113.13:1234 '
+                '[18/Nov/2026:00:00:03.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
+                '{public.example.com} {} "GET /ok HTTP/1.1"\n'
+                'Nov 18 00:00:04 demo haproxy[1]: 203.0.113.14:1234 '
+                '[18/Nov/2026:00:00:04.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
+                '"GET https://private.example.com/callback?secret HTTP/1.1"\n'
+                'Nov 18 00:00:05 demo haproxy[1]: 203.0.113.15:1234 '
+                '[18/Nov/2026:00:00:05.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
+                '"GET /hidden HTTP/1.1"\n',
+                encoding="utf-8",
+            )
+            settings = demo_settings(
+                temp_path,
+                demo=False,
+                log_file=log,
+                excluded_domains=("private.example.com",),
+            )
+            service = SnapshotService(settings)
+            service.refresh_once()
+            snapshot = service.snapshot()
+
+        payload = json.dumps(snapshot)
+        self.assertNotIn("token=secret", payload)
+        self.assertNotIn("private.example.com", payload)
+        self.assertNotIn("203.0.113.12", payload)
+        self.assertNotIn("203.0.113.14", payload)
+        self.assertEqual(snapshot["kpis"]["http_total"], 2)
+        self.assertEqual(snapshot["kpis"]["tls_total"], 1)
+        self.assertEqual(snapshot["parser"]["excluded_events"], 3)
+        self.assertEqual(snapshot["meta"]["privacy"]["excluded_domains"], 1)
+        self.assertEqual(snapshot["meta"]["privacy"]["excluded_events"], 3)
+        self.assertIn("/hidden", payload)
+        self.assertIn("/ok", payload)
+
     def test_internal_ip_in_http_path_is_masked(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_path = Path(temp)

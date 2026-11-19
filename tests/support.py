@@ -32,6 +32,7 @@ def base_settings(tmp_path: Path, **overrides: object) -> Settings:
         "mask_internal_ips": False,
         "mask_networks": (),
         "mask_full": False,
+        "excluded_domains": (),
         "refresh_seconds": 60,
     }
     values.update(overrides)

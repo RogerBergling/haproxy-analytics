@@ -28,6 +28,29 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(parsed.event.method, "GET")
         self.assertEqual(parsed.event.path, "/assets/app.css")
 
+    def test_standard_http_line_with_captured_host(self) -> None:
+        line = (
+            'Nov 18 00:01:02 demo haproxy[1234]: 203.0.113.10:53124 '
+            '[18/Nov/2026:00:01:02.123] ft_https bk_app/app1 0/0/1/2/3 200 5120 '
+            '{App.Example.COM:443} {} "GET /private?token=secret HTTP/1.1"'
+        )
+        parsed = parse_line(line)
+        self.assertIsNotNone(parsed)
+        self.assertIsInstance(parsed.event, HttpEvent)
+        self.assertEqual(parsed.event.hosts, ("app.example.com",))
+        self.assertEqual(parsed.event.path, "/private?token=secret")
+
+    def test_captured_host_does_not_have_to_be_first(self) -> None:
+        line = (
+            'Nov 18 00:01:02 demo haproxy[1234]: 203.0.113.10:53124 '
+            '[18/Nov/2026:00:01:02.123] ft_https bk_app/app1 0/0/1/2/3 200 5120 '
+            '{203.0.113.99|app.example.com} {} "GET /private HTTP/1.1"'
+        )
+        parsed = parse_line(line)
+        self.assertIsNotNone(parsed)
+        self.assertIsInstance(parsed.event, HttpEvent)
+        self.assertIn("app.example.com", parsed.event.hosts)
+
     def test_ipv6_http_line(self) -> None:
         line = (
             'Nov 18 00:01:21 demo haproxy[2345]: [2001:0db8::0010]:53135 '
