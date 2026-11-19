@@ -3,11 +3,13 @@ from __future__ import annotations
 import http.client
 import ipaddress
 import json
+import socketserver
 import tempfile
 import threading
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import patch
 
 from haproxy_analytics.logsource import SyslogBuffer, SyslogServer
 from haproxy_analytics.server import create_server
@@ -339,6 +341,22 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(body, b"")
             self.assertGreater(int(headers["content-length"]), 0)
+
+    def test_connection_reset_is_silenced(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            settings = demo_settings(Path(temp)).with_overrides(port=0)
+            service = SnapshotService(settings)
+            server = create_server(settings, service)
+            try:
+                with patch.object(socketserver.BaseServer, "handle_error") as parent:
+                    try:
+                        raise ConnectionResetError("client reset")
+                    except ConnectionResetError:
+                        server.handle_error(None, ("127.0.0.1", 1))
+                    parent.assert_not_called()
+            finally:
+                server.server_close()
+                service.stop()
 
 
 if __name__ == "__main__":

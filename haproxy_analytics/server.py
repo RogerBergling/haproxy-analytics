@@ -7,6 +7,7 @@ import json
 import logging
 import mimetypes
 import secrets
+import sys
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -348,6 +349,16 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
 class AnalyticsHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
+
+    def handle_error(self, request: object, client_address: object) -> None:
+        error = sys.exc_info()[1]
+        if isinstance(
+            error,
+            (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, TimeoutError),
+        ):
+            LOGGER.debug("Client %s disconnected without a complete request: %s", client_address, error)
+            return
+        super().handle_error(request, client_address)
 
     def __init__(
         self,
