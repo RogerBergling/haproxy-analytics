@@ -80,18 +80,28 @@ The app reads the client address, timestamp, frontend, backend, status, bytes,
 method, path and protocol. It does not require a specific frontend or backend
 name.
 
-### Excluding domains
+### Excluding or reducing domains
 
-Set `EXCLUDED_DOMAINS` on the analytics host to keep sensitive applications out
-of the dashboard and API:
+Use `EXCLUDED_DOMAINS` to drop a domain completely, or
+`DOMAIN_ONLY_DOMAINS` to keep its traffic counts while hiding the URI:
 
 ```dotenv
+# Drop these domains entirely.
 EXCLUDED_DOMAINS=private.example.com,secret.example.org
+
+# Keep counts, but show only the domain instead of the path/query.
+DOMAIN_ONLY_DOMAINS=sendpass.example.com
 ```
 
-The value is a comma-separated list. A domain matches itself and all
-subdomains. TLS/SNI events are matched by their SNI value. HTTP events are
-matched by a captured `Host` header or by the host in an absolute request URL.
+The values are comma-separated lists. A domain matches itself and all
+subdomains. Overlapping or parent/child lists are rejected at startup. TLS/SNI events are matched by
+their SNI value. HTTP events are matched by captured `Host` header values or by
+the host in an absolute request URL.
+
+For `DOMAIN_ONLY_DOMAINS`, an origin-form request is displayed as
+`sendpass.example.com/`; an absolute URL is displayed as
+`https://sendpass.example.com/`. The query string is removed, but request,
+status, byte and backend counts still include the event.
 
 For HTTP matching, capture the Host header in the HTTP frontend:
 

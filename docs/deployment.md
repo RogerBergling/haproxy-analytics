@@ -82,6 +82,7 @@ uses the shell environment or CLI flags, not `.env` automatically.
 | `MASK_NETWORKS` | empty | Additional CIDRs to mask even if public, for example `192.0.0.0/8,172.0.0.0/8`. |
 | `MASK_FULL` | `false` | Use one full mask (`x.x.x.x` / `x:x:x:x:x:x:x:x`) instead of prefix masks. |
 | `EXCLUDED_DOMAINS` | empty | Comma-separated domains to drop before aggregation. Matches the domain and all subdomains. HTTP matching needs a captured Host header. |
+| `DOMAIN_ONLY_DOMAINS` | empty | Comma-separated domains to keep at domain-only granularity. Paths/query strings are replaced with the domain; counts remain. Must not overlap or contain an `EXCLUDED_DOMAINS` entry. |
 | `GEOIP_DIR` | `./geoip` | Host directory mounted at `/geoip` read-only. |
 | `GEOIP_CITY_DB` | `/geoip/GeoLite2-City.mmdb` | City database path inside the container. |
 | `GEOIP_ASN_DB` | `/geoip/GeoLite2-ASN.mmdb` | ASN database path inside the container. |
@@ -197,14 +198,24 @@ those addresses.
 
 ### Domain exclusion
 
-Use `EXCLUDED_DOMAINS` when an application places secrets in URLs or when a
-domain should not appear in the dashboard at all:
+There are two independent lists:
 
 ```dotenv
+# Drop these domains entirely.
 EXCLUDED_DOMAINS=private.example.com,secret.example.org
+
+# Keep these domains in statistics, but replace the URI with the domain.
+DOMAIN_ONLY_DOMAINS=sendpass.example.com
 ```
 
-Matching rules:
+A domain may appear in one list only; overlapping or parent/child combinations are rejected at startup.
+
+| Mode | Result |
+| --- | --- |
+| `EXCLUDED_DOMAINS` | Matching HTTP/TLS events do not contribute to KPIs, maps, visitors, paths or requests. |
+| `DOMAIN_ONLY_DOMAINS` | Matching HTTP requests still count, but the path and query are replaced with a domain label. |
+
+Matching rules for both lists:
 
 - multiple domains are comma-separated;
 - matching is case-insensitive;
@@ -213,15 +224,13 @@ Matching rules:
 - a leading `.` or `*.` is accepted and normalized;
 - do not include a scheme, path, port or credentials.
 
-The filter is applied before aggregation, so matching events do not contribute
-to KPIs, maps, visitors, paths, requests or the API. TLS/SNI events are matched
-by SNI. HTTP events are matched by:
+TLS/SNI events are matched by SNI. HTTP events are matched by:
 
-1. the captured `Host` header, if present in the log; or
+1. captured `Host` header values, if present in the log; or
 2. the host of an absolute request URL such as
    `https://private.example.com/callback`.
 
-For HTTP domain exclusion, capture the Host header in the HAProxy frontend:
+For HTTP matching, capture the Host header in the HAProxy frontend:
 
 ```haproxy
 frontend fe_https
@@ -233,14 +242,22 @@ frontend fe_https
 The parser accepts logs with or without the capture. Without it, ordinary
 origin-form requests (`GET /path HTTP/1.1`) cannot be attributed to a domain.
 
-> **Important:** this is an application-level filter. It does not redact the
-> raw HAProxy log, the optional persistent syslog store or existing backups. If
-> the URL itself contains a secret, also prevent or redact that logging at the
-> HAProxy/rsyslog source and apply your retention policy. See
-> [haproxy.md](haproxy.md#excluding-domains) for a source-side ACL example.
+For `DOMAIN_ONLY_DOMAINS`, an origin-form request to
+`sendpass.example.com` is displayed as `sendpass.example.com/`, and an absolute
+request URL is displayed as `https://sendpass.example.com/`. The query string is
+never retained in the domain-only label. Request, status, byte, visitor and
+backend statistics still count the event.
 
-The current count of excluded domains and skipped events is shown in the
-**Security & privacy** tab and in `meta.privacy` on `/api/snapshot`.
+> **Important:** both modes are application-level filters. They do not redact
+> the raw HAProxy log, the optional persistent syslog store or existing
+> backups. If the URL itself contains a secret, also prevent or redact that
+> logging at the HAProxy/rsyslog source and apply your retention policy. See
+> [haproxy.md](haproxy.md#excluding-or-reducing-domains) for a source-side ACL
+> example.
+
+The current counts are shown in the **Security & privacy** tab and in
+`meta.privacy` on `/api/snapshot`: `excluded_domains`, `domain_only_domains`,
+`excluded_events` and `redacted_paths`.
 
 ### Syslog receiver
 

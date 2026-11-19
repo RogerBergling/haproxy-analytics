@@ -5,6 +5,7 @@ import unittest
 
 from haproxy_analytics.privacy import (
     domain_matches,
+    domain_only_path,
     host_from_url,
     is_internal_ip,
     mask_ip,
@@ -110,6 +111,20 @@ class PrivacyTests(unittest.TestCase):
         self.assertEqual(host_from_url("http://app.example.com:8080/path"), "app.example.com")
         self.assertEqual(host_from_url("//app.example.com/path"), "app.example.com")
         self.assertEqual(host_from_url("/relative/path"), "")
+
+    def test_domain_only_path(self) -> None:
+        self.assertEqual(
+            domain_only_path("sendpass.example.com", "/?SECRET"),
+            "sendpass.example.com/",
+        )
+        self.assertEqual(
+            domain_only_path("sendpass.example.com", "https://sendpass.example.com/?SECRET"),
+            "https://sendpass.example.com/",
+        )
+        self.assertEqual(
+            domain_only_path("sendpass.example.com", "http://sendpass.example.com/path?q=1"),
+            "http://sendpass.example.com/",
+        )
 
     def test_normalize_host(self) -> None:
         self.assertEqual(normalize_host("App.Example.COM.:443"), "app.example.com")

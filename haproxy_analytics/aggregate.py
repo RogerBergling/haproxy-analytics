@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict, deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from .geoip import GeoResolver
 from .parser import HttpEvent, ParsedEvent, TlsEvent
-from .privacy import IPNetwork, domain_matches, host_from_url, mask_ip, mask_text_ips
+from .privacy import (
+    IPNetwork,
+    domain_matches,
+    domain_only_path,
+    host_from_url,
+    mask_ip,
+    mask_text_ips,
+)
 
 _UNKNOWN_COUNTRIES = {"Unknown", "Private network", "-"}
 
@@ -43,6 +50,7 @@ class Aggregator:
         mask_networks: tuple[IPNetwork, ...] = (),
         mask_full: bool = False,
         excluded_domains: tuple[str, ...] = (),
+        domain_only_domains: tuple[str, ...] = (),
     ) -> None:
         self.geo = geo
         self.max_visitor_rows = max_visitor_rows
@@ -52,6 +60,7 @@ class Aggregator:
         self.mask_full = mask_full
         self.masking_enabled = mask_internal_ips or bool(mask_networks)
         self.excluded_domains = excluded_domains
+        self.domain_only_domains = domain_only_domains
 
         self.http_total = 0
         self.tls_total = 0
@@ -60,6 +69,7 @@ class Aggregator:
         self.parsed_events = 0
         self.repeated_groups = 0
         self.excluded_events = 0
+        self.redacted_paths = 0
 
         self.http_by_ip: Counter[str] = Counter()
         self.tls_by_ip: Counter[str] = Counter()
@@ -159,6 +169,17 @@ class Aggregator:
         url_host = host_from_url(event.path)
         return bool(url_host and domain_matches(url_host, self.excluded_domains))
 
+    def _domain_only_host(self, event: HttpEvent) -> str:
+        if not self.domain_only_domains:
+            return ""
+        for host in event.hosts:
+            if domain_matches(host, self.domain_only_domains):
+                return host
+        url_host = host_from_url(event.path)
+        if url_host and domain_matches(url_host, self.domain_only_domains):
+            return url_host
+        return ""
+
     def add(self, parsed: ParsedEvent) -> None:
         event = parsed.event
         if isinstance(event, TlsEvent):
@@ -170,6 +191,13 @@ class Aggregator:
             if self._http_is_excluded(event):
                 self.excluded_events += event.count
                 return
+            domain_only_host = self._domain_only_host(event)
+            if domain_only_host:
+                event = replace(
+                    event,
+                    path=domain_only_path(domain_only_host, event.path),
+                )
+                self.redacted_paths += event.count
             self._add_http(event)
 
     def _add_tls(self, event: TlsEvent) -> None:
@@ -682,6 +710,7 @@ class Aggregator:
                 "repeated_groups": self.repeated_groups,
                 "events": self.parsed_events,
                 "excluded_events": self.excluded_events,
+                "redacted_paths": self.redacted_paths,
             },
         }
 

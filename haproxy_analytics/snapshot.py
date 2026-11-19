@@ -33,13 +33,16 @@ def _empty_payload(message: str) -> dict[str, Any]:
                 "mask_networks": [],
                 "mask_full": False,
                 "excluded_domains": 0,
+                "domain_only_domains": 0,
                 "excluded_events": 0,
+                "redacted_paths": 0,
             },
             "parser": {
                 "unparsed_lines": 0,
                 "repeated_groups": 0,
                 "events": 0,
                 "excluded_events": 0,
+                "redacted_paths": 0,
             },
             "warnings": [message],
             "duration_ms": 0,
@@ -82,6 +85,7 @@ def _empty_payload(message: str) -> dict[str, Any]:
             "repeated_groups": 0,
             "events": 0,
             "excluded_events": 0,
+            "redacted_paths": 0,
         },
     }
 
@@ -235,6 +239,7 @@ class SnapshotService:
                 mask_networks=self.settings.mask_networks,
                 mask_full=self.settings.mask_full,
                 excluded_domains=self.settings.excluded_domains,
+                domain_only_domains=self.settings.domain_only_domains,
             )
             try:
                 for line in lines:
@@ -279,7 +284,9 @@ class SnapshotService:
                     "mask_networks": [str(network) for network in self.settings.mask_networks],
                     "mask_full": self.settings.mask_full,
                     "excluded_domains": len(self.settings.excluded_domains),
+                    "domain_only_domains": len(self.settings.domain_only_domains),
                     "excluded_events": data["parser"]["excluded_events"],
+                    "redacted_paths": data["parser"]["redacted_paths"],
                 },
                 "parser": data["parser"],
                 "warnings": warnings,

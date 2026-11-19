@@ -20,6 +20,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.mask_networks, ())
         self.assertFalse(settings.mask_full)
         self.assertEqual(settings.excluded_domains, ())
+        self.assertEqual(settings.domain_only_domains, ())
         self.assertIsNone(settings.syslog_store_file)
 
     def test_empty_log_file_disables_file_source(self) -> None:
@@ -52,6 +53,37 @@ class ConfigTests(unittest.TestCase):
         ):
             settings = Settings.from_env()
         self.assertEqual(settings.excluded_domains, ("example.com", "example.org"))
+
+    def test_domain_only_domains(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"DOMAIN_ONLY_DOMAINS": "*.Sendpass.Example, private.example.org"},
+            clear=True,
+        ):
+            settings = Settings.from_env()
+        self.assertEqual(
+            settings.domain_only_domains,
+            ("sendpass.example", "private.example.org"),
+        )
+
+    def test_excluded_and_domain_only_overlap_is_rejected(self) -> None:
+        pairs = (
+            ("secret.example.com", "secret.example.com"),
+            ("example.com", "sendpass.example.com"),
+            ("sendpass.example.com", "example.com"),
+        )
+        for excluded, domain_only in pairs:
+            with self.subTest(excluded=excluded, domain_only=domain_only):
+                with patch.dict(
+                    os.environ,
+                    {
+                        "EXCLUDED_DOMAINS": excluded,
+                        "DOMAIN_ONLY_DOMAINS": domain_only,
+                    },
+                    clear=True,
+                ):
+                    with self.assertRaises(ConfigError):
+                        Settings.from_env()
 
     def test_invalid_excluded_domain(self) -> None:
         for value in ("https://example.com", "example.com/path", "user@example.com", "."):

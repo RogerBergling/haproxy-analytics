@@ -108,6 +108,42 @@ class SnapshotTests(unittest.TestCase):
         self.assertIn("/hidden", payload)
         self.assertIn("/ok", payload)
 
+    def test_domain_only_domains_keep_counts_but_redact_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            log = temp_path / "haproxy.log"
+            log.write_text(
+                'Nov 18 00:00:00 demo haproxy[1]: 203.0.113.10:1234 '
+                '[18/Nov/2026:00:00:00.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
+                '{sendpass.example.com} {} "GET /?SECRET HTTP/1.1"\n'
+                'Nov 18 00:00:01 demo haproxy[1]: 203.0.113.11:1234 '
+                '[18/Nov/2026:00:00:01.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
+                '{sendpass.example.com} {} "GET https://sendpass.example.com/?SECRET HTTP/1.1"\n'
+                'Nov 18 00:00:02 demo haproxy[1]: 203.0.113.12:1234 '
+                '[18/Nov/2026:00:00:02.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
+                '{public.example.com} {} "GET /ok?x=1 HTTP/1.1"\n',
+                encoding="utf-8",
+            )
+            settings = demo_settings(
+                temp_path,
+                demo=False,
+                log_file=log,
+                domain_only_domains=("sendpass.example.com",),
+            )
+            service = SnapshotService(settings)
+            service.refresh_once()
+            snapshot = service.snapshot()
+
+        payload = json.dumps(snapshot)
+        self.assertNotIn("SECRET", payload)
+        self.assertIn("sendpass.example.com/", payload)
+        self.assertIn("https://sendpass.example.com/", payload)
+        self.assertIn("/ok?x=1", payload)
+        self.assertEqual(snapshot["kpis"]["http_total"], 3)
+        self.assertEqual(snapshot["parser"]["redacted_paths"], 2)
+        self.assertEqual(snapshot["meta"]["privacy"]["domain_only_domains"], 1)
+        self.assertEqual(snapshot["meta"]["privacy"]["redacted_paths"], 2)
+
     def test_internal_ip_in_http_path_is_masked(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_path = Path(temp)

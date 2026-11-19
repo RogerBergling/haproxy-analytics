@@ -162,6 +162,7 @@ class Settings:
     mask_networks: tuple[IPNetwork, ...]
     mask_full: bool
     excluded_domains: tuple[str, ...]
+    domain_only_domains: tuple[str, ...]
     geoip_city_db: Path
     geoip_asn_db: Path
     trusted_proxies: tuple[IPNetwork, ...]
@@ -235,6 +236,23 @@ class Settings:
         excluded_domains = _parse_domains(
             "EXCLUDED_DOMAINS", _env_csv("EXCLUDED_DOMAINS")
         )
+        domain_only_domains = _parse_domains(
+            "DOMAIN_ONLY_DOMAINS", _env_csv("DOMAIN_ONLY_DOMAINS")
+        )
+        overlaps = []
+        for excluded in excluded_domains:
+            for domain_only in domain_only_domains:
+                if (
+                    excluded == domain_only
+                    or domain_only.endswith(f".{excluded}")
+                    or excluded.endswith(f".{domain_only}")
+                ):
+                    overlaps.append(f"{excluded}/{domain_only}")
+        if overlaps:
+            raise ConfigError(
+                "EXCLUDED_DOMAINS and DOMAIN_ONLY_DOMAINS overlap or contain "
+                "each other: " + ", ".join(sorted(set(overlaps)))
+            )
 
         app_port = _env_int("APP_PORT", 8080, 1)
         if app_port > 65535:
@@ -255,6 +273,7 @@ class Settings:
             mask_networks=_parse_networks("MASK_NETWORKS", _env_csv("MASK_NETWORKS")),
             mask_full=_env_bool("MASK_FULL", False),
             excluded_domains=excluded_domains,
+            domain_only_domains=domain_only_domains,
             geoip_city_db=_resolve_path(_env("GEOIP_CITY_DB"), Path("/geoip/GeoLite2-City.mmdb")),
             geoip_asn_db=_resolve_path(_env("GEOIP_ASN_DB"), Path("/geoip/GeoLite2-ASN.mmdb")),
             trusted_proxies=trusted,

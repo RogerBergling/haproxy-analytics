@@ -74,21 +74,26 @@ the error in `/healthz`.
   HAProxy stats socket. It does not consume log data and does not affect the
   snapshot counters.
 
-## Domain exclusion
+## Domain filtering
 
-`EXCLUDED_DOMAINS` is applied in the aggregator before any counters are
-incremented. TLS events match on SNI. HTTP events match on the captured `Host`
-header or the host of an absolute request URL. The match is exact-or-subdomain
-and case-insensitive. Excluded events are not present in the snapshot, visitor
-rows, request rows, paths or map data.
+Two lists are applied in the aggregator before any counters are incremented:
+
+- `EXCLUDED_DOMAINS` drops matching events entirely.
+- `DOMAIN_ONLY_DOMAINS` keeps matching HTTP events but replaces the request
+  target with a domain label such as `sendpass.example.com/` or
+  `https://sendpass.example.com/`, removing the path and query string.
+
+TLS events match on SNI. HTTP events match on captured `Host` header values or
+the host of an absolute request URL. The match is exact-or-subdomain and
+case-insensitive. The two lists may not overlap or contain each other.
 
 The parser supports the standard `option httplog` format with an optional
 `capture request header Host len 64`. Without that capture, origin-form HTTP
 requests do not contain a domain, so only SNI and absolute-URL matching can
-exclude them.
+identify them.
 
 Raw log lines are never stored in the snapshot. The optional persistent syslog
-store and external log files are not redacted by this filter.
+store and external log files are not redacted by these filters.
 
 ## Snapshot API
 
@@ -96,8 +101,9 @@ store and external log files are not redacted by this filter.
 
 - `meta`: generation time, refresh interval, version, active sources, GeoIP
   availability, syslog store status, privacy counts, parser statistics and
-  warnings. `meta.privacy.excluded_domains` and `excluded_events` describe the
-  domain filter without exposing the configured domain list.
+  warnings. `meta.privacy.excluded_domains`, `domain_only_domains`,
+  `excluded_events` and `redacted_paths` describe the domain filters without
+  exposing the configured domain lists.
 - `kpis`: HTTP requests, TLS connections, unique IPs, countries, 4xx/5xx,
   bandwidth, geolocated points, SNI hostnames and backends.
 - `http`: methods, statuses, status classes, protocols, hourly distribution,
@@ -110,7 +116,8 @@ store and external log files are not redacted by this filter.
   `MASK_INTERNAL_IPS` is enabled, non-global addresses are masked and rows are
   grouped by their masked prefix; `visitors.masked` and `visitors.raw_total`
   describe the result.
-- `parser`: unparsed line, repeated-group and excluded-event counts.
+- `parser`: unparsed line, repeated-group, excluded-event and redacted-path
+  counts.
 
 The API is same-origin and protected by the same network boundary as the HTML.
 It is not a public API.
@@ -163,9 +170,10 @@ stable disabled payload with HTTP 200.
    at `level user`. The app sends only two whitelisted `show` commands.
 7. **Rendering**: dashboard values are inserted as text nodes and DOM APIs, never
    `innerHTML`. There is no third-party report iframe or chart script.
-8. **Domain filter**: configured domains are dropped before aggregation. The
-   filter covers SNI and captured/absolute-URL HTTP hosts; it does not redact
-   raw logs or the persistent syslog store.
+8. **Domain filters**: configured domains can be dropped entirely, or kept at
+   domain-only granularity with paths and query strings removed. Matching
+   covers SNI and captured/absolute-URL HTTP hosts; it does not redact raw logs
+   or the persistent syslog store.
 9. **Container**: non-root user, read-only root filesystem, no capabilities and
    `no-new-privileges`.
 

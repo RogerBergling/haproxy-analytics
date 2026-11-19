@@ -61,19 +61,22 @@ If `meta.connected` is false, check the endpoint, firewall, HAProxy stats socket
 bind and the HAProxy reload. The app reconnects on the next interval and does
 not require a restart after a transient failure.
 
-## Domain exclusion
+## Domain filtering
 
-Use `EXCLUDED_DOMAINS` to drop sensitive applications before aggregation:
+Use `EXCLUDED_DOMAINS` to drop sensitive applications before aggregation, or
+`DOMAIN_ONLY_DOMAINS` to keep their counts while replacing the URI with the
+domain:
 
 ```dotenv
 EXCLUDED_DOMAINS=private.example.com,secret.example.org
+DOMAIN_ONLY_DOMAINS=sendpass.example.com
 ```
 
 Check the result:
 
 ```bash
 curl -fsS http://127.0.0.1:8009/api/snapshot \
-  | python3 -c 'import json,sys; p=json.load(sys.stdin)["meta"]["privacy"]; print(p["excluded_domains"], p["excluded_events"])'
+  | python3 -c 'import json,sys; p=json.load(sys.stdin)["meta"]["privacy"]; print(p["excluded_domains"], p["domain_only_domains"], p["excluded_events"], p["redacted_paths"])'
 ```
 
 - SNI matching works for TLS/SNI events.
@@ -81,6 +84,10 @@ curl -fsS http://127.0.0.1:8009/api/snapshot \
   frontend, unless the request target is an absolute URL with a host.
 - The filter is exact-or-subdomain and case-insensitive.
 - Excluded events do not appear in KPIs, maps, visitors, paths or request rows.
+- Domain-only events keep request/status/byte/backend counts, but show
+  `sendpass.example.com/` or `https://sendpass.example.com/` instead of the
+  original path and query string.
+- The two lists must not overlap or contain each other.
 - Raw log lines, rotated files and `SYSLOG_STORE_FILE` are not redacted. Use
   source-side log controls and retention for secrets that must not be written.
 

@@ -114,6 +114,26 @@ def domain_matches(host: str | None, domains: tuple[str, ...]) -> bool:
     return False
 
 
+def domain_only_path(host: str, path: str) -> str:
+    """Replace a request target with a domain-only label.
+
+    The scheme is preserved when the original request target is an absolute
+    URL. Origin-form requests do not contain a scheme, so the label is just the
+    domain and a trailing slash.
+    """
+
+    if not host:
+        return path
+    scheme = ""
+    if path.startswith(("http://", "https://")):
+        try:
+            scheme = urlsplit(path).scheme
+        except ValueError:
+            scheme = ""
+    prefix = f"{scheme}://" if scheme else ""
+    return f"{prefix}{host}/"
+
+
 def _match_network(
     address: ipaddress.IPv4Address | ipaddress.IPv6Address,
     networks: tuple[IPNetwork, ...],

@@ -1139,12 +1139,25 @@ function renderDomainFilter() {
   if (!node || !state.snapshot) return;
   const privacy = (state.snapshot.meta && state.snapshot.meta.privacy) || {};
   const domains = Number(privacy.excluded_domains) || 0;
+  const domainOnly = Number(privacy.domain_only_domains) || 0;
   const events = Number(privacy.excluded_events) || 0;
-  if (!domains) {
-    node.textContent = "No domains are excluded. Set EXCLUDED_DOMAINS to a comma-separated list to drop matching HTTP and TLS events before aggregation.";
+  const redacted = Number(privacy.redacted_paths) || 0;
+  if (!domains && !domainOnly) {
+    node.textContent = "No domain filtering is active. Set EXCLUDED_DOMAINS to drop domains entirely or DOMAIN_ONLY_DOMAINS to keep domain-level statistics with the URI removed.";
     return;
   }
-  node.textContent = `${fmt(domains)} domain(s) excluded from HTTP/TLS aggregation. ${fmt(events)} event(s) skipped in this snapshot. HTTP matching uses a captured Host header or an absolute URL. Raw log lines and the persistent syslog store are not redacted.`;
+  const parts = [];
+  if (domains) parts.push(`${fmt(domains)} domain(s) excluded entirely.`);
+  if (domainOnly) {
+    parts.push(
+      `${fmt(domainOnly)} domain(s) kept at domain-only granularity; ${fmt(redacted)} request path(s) redacted.`
+    );
+  }
+  parts.push(`${fmt(events)} event(s) skipped in this snapshot.`);
+  parts.push(
+    "HTTP matching uses a captured Host header or an absolute URL. Raw log lines and the persistent syslog store are not redacted."
+  );
+  node.textContent = parts.join(" ");
 }
 
 function renderSyslogStore() {

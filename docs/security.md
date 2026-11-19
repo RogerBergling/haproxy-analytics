@@ -291,20 +291,27 @@ IPv6  -> x:x:x:x:x:x:x:x
 With a full mask, all masked rows of the same family are grouped into one row.
 Public addresses that are not in `MASK_NETWORKS` remain unchanged.
 
-## Domain exclusion
+## Domain filtering
 
-`EXCLUDED_DOMAINS` is an optional comma-separated list of domains whose events
-are dropped before aggregation. It is intended for applications that place
-secrets in URLs or whose hostnames must not appear in the dashboard.
+Two optional comma-separated lists control domain-level handling:
+
+- `EXCLUDED_DOMAINS` drops matching HTTP/TLS events before aggregation.
+- `DOMAIN_ONLY_DOMAINS` keeps matching HTTP events and counts, but replaces the
+  request path and query string with a domain label such as
+  `sendpass.example.com/` or `https://sendpass.example.com/`.
+
+A domain may appear in one list only; overlapping or parent/child combinations are rejected at startup.
 
 - TLS/SNI events are matched by SNI.
-- HTTP events are matched by a captured `Host` header or by the host in an
+- HTTP events are matched by captured `Host` header values or by the host in an
   absolute request URL.
 - `example.com` matches the domain itself and all subdomains. Matching is
   case-insensitive; schemes, ports and trailing dots are not part of the
   configured value.
-- Matching events do not contribute to KPIs, maps, visitors, paths, request
+- Excluded events do not contribute to KPIs, maps, visitors, paths, request
   rows or the snapshot API.
+- Domain-only events contribute to request, status, byte, visitor and backend
+  statistics, but never expose the original path or query string.
 
 HTTP matching requires the Host header in the log:
 
@@ -312,13 +319,13 @@ HTTP matching requires the Host header in the log:
 capture request header Host len 64
 ```
 
-**Limitations:** this is not redaction. Raw HAProxy log lines, the optional
+**Limitations:** neither mode is redaction. Raw HAProxy log lines, the optional
 persistent syslog store, rotated files and backups still contain the original
 data. If a URL itself contains a secret, prevent or redact that logging at the
 HAProxy/rsyslog source and apply the same retention rules as the log. See
-[haproxy.md](haproxy.md#excluding-domains) for a source-side ACL example. The
-app reports only the number of configured domains and skipped events, not the
-domain list, in `meta.privacy`.
+[haproxy.md](haproxy.md#excluding-or-reducing-domains) for a source-side ACL
+example. The app reports only counts, not the configured domain lists, in
+`meta.privacy`.
 
 ## GeoIP privacy
 

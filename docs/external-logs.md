@@ -9,10 +9,11 @@ HAProxy stats socket, not the log path. See
 [haproxy.md](haproxy.md#5-read-only-live-stats-socket) for the remote socket
 requirements and firewall controls.
 
-`EXCLUDED_DOMAINS` filters the dashboard/API before aggregation. It does not
-redact a central log file or the optional persistent syslog store; if an
-application writes secrets into URLs, control that logging at the source and
-apply your retention policy to every copy.
+`EXCLUDED_DOMAINS` drops matching events, while `DOMAIN_ONLY_DOMAINS` keeps
+domain-level counts and replaces the URI with the domain. Neither mode redacts a
+central log file or the optional persistent syslog store; if an application
+writes secrets into URLs, control that logging at the source and apply your
+retention policy to every copy.
 
 ## Choose a pattern
 
