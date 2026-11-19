@@ -15,6 +15,7 @@ from .privacy import (
     host_from_url,
     mask_ip,
     mask_text_ips,
+    select_http_host,
 )
 
 _UNKNOWN_COUNTRIES = {"Unknown", "Private network", "-"}
@@ -24,6 +25,7 @@ _UNKNOWN_COUNTRIES = {"Unknown", "Private network", "-"}
 class RequestRow:
     when: str
     ip: str
+    host: str
     method: str
     path: str
     status: str
@@ -280,6 +282,7 @@ class Aggregator:
             RequestRow(
                 when=event.timestamp_display,
                 ip=event.ip,
+                host=select_http_host(event.hosts, event.path),
                 method=event.method,
                 path=event.path,
                 status=event.status,
@@ -655,6 +658,7 @@ class Aggregator:
                         )
                         if self.masking_enabled
                         else row.ip,
+                        "host": self._mask_text(row.host),
                         "method": row.method,
                         "path": self._mask_text(row.path),
                         "status": row.status,

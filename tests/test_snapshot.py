@@ -143,6 +143,10 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["parser"]["redacted_paths"], 2)
         self.assertEqual(snapshot["meta"]["privacy"]["domain_only_domains"], 1)
         self.assertEqual(snapshot["meta"]["privacy"]["redacted_paths"], 2)
+        self.assertEqual(
+            [row["host"] for row in snapshot["http"]["recent"]],
+            ["public.example.com", "sendpass.example.com", "sendpass.example.com"],
+        )
 
     def test_internal_ip_in_http_path_is_masked(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

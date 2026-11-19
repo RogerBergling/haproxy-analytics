@@ -12,6 +12,7 @@ from haproxy_analytics.privacy import (
     mask_text_ips,
     normalize_domain,
     normalize_host,
+    select_http_host,
 )
 
 
@@ -111,6 +112,18 @@ class PrivacyTests(unittest.TestCase):
         self.assertEqual(host_from_url("http://app.example.com:8080/path"), "app.example.com")
         self.assertEqual(host_from_url("//app.example.com/path"), "app.example.com")
         self.assertEqual(host_from_url("/relative/path"), "")
+
+    def test_select_http_host(self) -> None:
+        self.assertEqual(
+            select_http_host(("203.0.113.5", "sendpass.example.com"), "/private"),
+            "sendpass.example.com",
+        )
+        self.assertEqual(
+            select_http_host((), "https://sendpass.example.com/private"),
+            "sendpass.example.com",
+        )
+        self.assertEqual(select_http_host(("203.0.113.5",), "/private"), "203.0.113.5")
+        self.assertEqual(select_http_host((), "/private"), "-")
 
     def test_domain_only_path(self) -> None:
         self.assertEqual(

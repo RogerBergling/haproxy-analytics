@@ -114,6 +114,32 @@ def domain_matches(host: str | None, domains: tuple[str, ...]) -> bool:
     return False
 
 
+def select_http_host(hosts: tuple[str, ...], path: str = "") -> str:
+    """Choose the most useful hostname for an HTTP request row.
+
+    An absolute URL host is authoritative. Otherwise prefer a captured value
+    that is a hostname rather than an IP address (for example when an
+    X-Forwarded-For capture precedes Host). Fall back to the first captured
+    value, or ``-`` when no host is available.
+    """
+
+    url_host = host_from_url(path)
+    if url_host:
+        return url_host
+    normalized_hosts: list[str] = []
+    for value in hosts:
+        host = normalize_host(value)
+        if not host or host in normalized_hosts:
+            continue
+        normalized_hosts.append(host)
+        candidate = host[1:-1] if host.startswith("[") and host.endswith("]") else host
+        try:
+            ipaddress.ip_address(candidate)
+        except ValueError:
+            return host
+    return normalized_hosts[0] if normalized_hosts else "-"
+
+
 def domain_only_path(host: str, path: str) -> str:
     """Replace a request target with a domain-only label.
 

@@ -103,8 +103,8 @@ The test suite covers:
 - UDP/TCP receiver allowlists, size limits and TCP TLS;
 - live stats parsing, response-size limits, row caps, failure fallback and
   omission of server addresses;
-- domain normalization/matching, captured Host parsing, exclusion before
-  aggregation and domain-only path redaction;
+- domain normalization/matching, captured Host parsing, request-host selection,
+  exclusion before aggregation and domain-only path redaction;
 - HTTP detail counters, protocol/status classes, request rows and per-IP row caps;
 - internal IP masking, masked visitor grouping and capped individual request rows;
 - persistent syslog store append, rotation, clear and API token checks;

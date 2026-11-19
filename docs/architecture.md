@@ -108,7 +108,8 @@ store and external log files are not redacted by these filters.
   bandwidth, geolocated points, SNI hostnames and backends.
 - `http`: methods, statuses, status classes, protocols, hourly distribution,
   backends, paths, countries, ASNs, per-IP details, and the newest individual
-  requests, capped by `MAX_REQUEST_ROWS`.
+  requests with their captured or absolute-URL hostname, capped by
+  `MAX_REQUEST_ROWS`.
 - `tls`: SNI hostnames, countries, ASNs and recent connections.
 - `geo`: countries, cities and map points with per-point IP lists for the
   self-highlight feature.

@@ -842,7 +842,7 @@ function renderHttpLatestRequests() {
         children: [
           el("td", {
             className: "muted",
-            attrs: { colspan: "8" },
+            attrs: { colspan: "9" },
             text: "No HTTP requests are available yet.",
           }),
         ],
@@ -867,6 +867,7 @@ function renderHttpLatestRequests() {
             className: "mono",
             text: item.port && item.port !== "-" ? `${item.ip}:${item.port}` : item.ip,
           }),
+          el("td", { className: "mono", text: item.host || "-" }),
           el("td", { className: "mono", text: item.method }),
           el("td", { children: [el("span", { className: `badge ${statusBadgeClass(item.status)}`, text: item.status })] }),
           requestCell,
@@ -973,6 +974,7 @@ function renderRequests() {
     const haystack = [
       item.time,
       item.ip,
+      item.host,
       item.country,
       item.city,
       item.method,
@@ -1003,6 +1005,7 @@ function renderRequests() {
             className: "mono",
             text: item.port && item.port !== "-" ? `${item.ip}:${item.port}` : item.ip,
           }),
+          el("td", { className: "mono", text: item.host || "-" }),
           el("td", { text: location }),
           el("td", { className: "mono", text: item.method }),
           el("td", { children: [el("span", { className: `badge ${statusBadgeClass(item.status)}`, text: item.status })] }),
@@ -1021,7 +1024,7 @@ function renderRequests() {
         children: [
           el("td", {
             className: "muted",
-            attrs: { colspan: "10" },
+            attrs: { colspan: "11" },
             text: search ? "No requests match the filter." : "No HTTP requests are available yet.",
           }),
         ],

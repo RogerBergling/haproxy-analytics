@@ -167,8 +167,9 @@ The **Per-IP HTTP details** table adds, for each displayed client IP:
 - first and last seen timestamps.
 
 The **Requests** tab lists the newest individual HTTP requests, including
-client IP and port, country/city, request, status, bytes, frontend,
-backend/server and protocol. It is capped by `MAX_REQUEST_ROWS` (default 2000)
+client IP and port, hostname, country/city, request, status, bytes, frontend,
+backend/server and protocol. The hostname comes from a captured Host header or
+an absolute request URL. It is capped by `MAX_REQUEST_ROWS` (default 2000)
 and has a text filter. Selecting **View requests** on a per-IP row opens the
 same table filtered to that client.
 

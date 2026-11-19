@@ -18,7 +18,7 @@ HAProxy Analytics is a small self-hosted service. It reads HAProxy logs from a m
 - **TLS/SNI analytics** from a TCP frontend that captures `req.ssl_sni`: hostnames, countries, ASNs and recent connections.
 - **Optional live stats** from a dedicated read-only HAProxy stats socket: global runtime counters, frontend/backend/server health, rates, sessions, errors and bytes. The app never sends runtime-control commands.
 - **Geo access** view: a world map plus searchable country and city tables, styled to match the other self-hosted apps in this workspace.
-- **Requests view**: the newest individual HTTP requests with time, client IP and port, country/city, method, status, request, bytes, frontend, backend/server and protocol, plus a text filter.
+- **Requests view**: the newest individual HTTP requests with time, client IP and port, hostname, country/city, method, status, request, bytes, frontend, backend/server and protocol, plus a text filter.
 - **Visitor table** grouped by observed client IP: SNI hostnames, HTTP backends, event counts and last-seen time.
 - **Internal IP masking** enabled by default: private, loopback and documentation addresses are masked in the dashboard and API; public addresses remain visible.
 - **Configurable domain exclusion** for sensitive applications: drop matching SNI hostnames, captured Host headers and absolute-URL hosts before aggregation. Supports multiple domains and subdomains.
