@@ -166,12 +166,15 @@ class Settings:
     geoip_city_db: Path
     geoip_asn_db: Path
     trusted_proxies: tuple[IPNetwork, ...]
+    allowed_hosts: tuple[str, ...]
     syslog_listen: str | None
     syslog_host: str | None
     syslog_port: int | None
     syslog_protocols: tuple[str, ...]
     syslog_allowed_networks: tuple[IPNetwork, ...]
     syslog_buffer_lines: int
+    syslog_buffer_bytes: int
+    syslog_max_threads: int
     syslog_max_message_bytes: int
     syslog_store_file: Path | None
     syslog_store_max_bytes: int
@@ -277,12 +280,19 @@ class Settings:
             geoip_city_db=_resolve_path(_env("GEOIP_CITY_DB"), Path("/geoip/GeoLite2-City.mmdb")),
             geoip_asn_db=_resolve_path(_env("GEOIP_ASN_DB"), Path("/geoip/GeoLite2-ASN.mmdb")),
             trusted_proxies=trusted,
+            allowed_hosts=tuple(
+                host.strip().lower().rstrip(".")
+                for host in _env_csv("ALLOWED_HOSTS")
+                if host.strip()
+            ),
             syslog_listen=listen_value or None,
             syslog_host=listen[0] if listen else None,
             syslog_port=listen[1] if listen else None,
             syslog_protocols=protocols,
             syslog_allowed_networks=allowed,
             syslog_buffer_lines=_env_int("SYSLOG_BUFFER_LINES", 200000, 1),
+            syslog_buffer_bytes=_env_int("SYSLOG_BUFFER_BYTES", 64 * 1024 * 1024, 1024 * 1024),
+            syslog_max_threads=_env_int("SYSLOG_MAX_THREADS", 64, 1),
             syslog_max_message_bytes=_env_int("SYSLOG_MAX_MESSAGE_BYTES", 65536, 256),
             syslog_store_file=(
                 _resolve_path(_env("SYSLOG_STORE_FILE"), Path("/data/syslog.log"))

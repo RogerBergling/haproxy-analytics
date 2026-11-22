@@ -60,6 +60,14 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(headers["referrer-policy"], "no-referrer")
             self.assertIn("no-store", headers["cache-control"])
 
+    def test_unknown_host_header_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, running_server(demo_settings(Path(temp))) as (port, _service):
+            status, _headers, body = request(
+                port, "GET", "/", headers={"Host": "rebind.example"}
+            )
+            self.assertEqual(status, 403)
+            self.assertIn(b"Forbidden", body)
+
     def test_snapshot_api(self) -> None:
         with tempfile.TemporaryDirectory() as temp, running_server(demo_settings(Path(temp))) as (port, _service):
             status, headers, body = request(port, "GET", "/api/snapshot")

@@ -198,6 +198,16 @@ class LogSourceTests(unittest.TestCase):
                 server.stop()
                 store.close()
 
+    def test_buffer_enforces_total_byte_budget(self) -> None:
+        buffer = SyslogBuffer(100, max_bytes=23)
+        buffer.append("1234567890")
+        buffer.append("abcdefghij")
+        buffer.append("ABCDEFGHIJ")
+        info = buffer.info()
+        self.assertLessEqual(info["buffered_bytes"], 23)
+        self.assertGreaterEqual(info["dropped"], 1)
+        self.assertEqual(buffer.snapshot(), ["abcdefghij", "ABCDEFGHIJ"])
+
     def test_oversized_udp_message_is_dropped(self) -> None:
         buffer = SyslogBuffer(100)
         server = SyslogServer(

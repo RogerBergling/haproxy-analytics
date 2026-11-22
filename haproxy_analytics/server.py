@@ -71,6 +71,7 @@ MIME_OVERRIDES = {
     ".map": "application/json; charset=utf-8",
 }
 STATIC_ROOT_FILES = {"favicon.svg", "robots.txt"}
+LOCAL_HOST_SUFFIXES = (".localhost", ".local", ".lan", ".home.arpa", ".internal")
 
 
 class AnalyticsHandler(BaseHTTPRequestHandler):
@@ -235,6 +236,29 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
                 return hop
         return peer
 
+    def _host_ok(self) -> bool:
+        """Reject unknown Host headers to block DNS-rebinding reads."""
+        raw = (self.headers.get("Host") or "").strip()
+        if not raw:
+            return False
+        try:
+            parsed = urlsplit("//" + raw)
+            name = (parsed.hostname or "").strip().lower().rstrip(".")
+        except ValueError:
+            return False
+        if not name:
+            return False
+        if name in self.settings.allowed_hosts:
+            return True
+        try:
+            ipaddress.ip_address(name)
+            return True
+        except ValueError:
+            pass
+        if "." not in name:
+            return True
+        return name.endswith(LOCAL_HOST_SUFFIXES)
+
     def _serve_root(self, *, head_only: bool = False) -> None:
         self._serve_static("/index.html", head_only=head_only)
 
@@ -305,6 +329,9 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
         self._send_json(result, status)
 
     def do_GET(self) -> None:  # noqa: N802
+        if not self._host_ok():
+            self._send_text(HTTPStatus.FORBIDDEN, "Forbidden")
+            return
         path = urlsplit(self.path).path
         if path in ("/", "/index.html"):
             self._serve_root()
@@ -328,6 +355,9 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
             self._send_text(HTTPStatus.NOT_FOUND, "Not found")
 
     def do_HEAD(self) -> None:  # noqa: N802
+        if not self._host_ok():
+            self._send_text(HTTPStatus.FORBIDDEN, "Forbidden", head_only=True)
+            return
         path = urlsplit(self.path).path
         if path in ("/", "/index.html"):
             self._serve_root(head_only=True)
@@ -362,6 +392,9 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self) -> None:  # noqa: N802
+        if not self._host_ok():
+            self._send_text(HTTPStatus.FORBIDDEN, "Forbidden")
+            return
         if urlsplit(self.path).path == "/api/syslog/clear":
             self._serve_clear_syslog()
         else:

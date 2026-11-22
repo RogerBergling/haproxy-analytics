@@ -188,6 +188,9 @@ Copy [`.env.example`](.env.example) to `.env`. The most important settings:
 | `GEOIP_DIR` | `./geoip` | Host directory containing `GeoLite2-*.mmdb`. |
 | `GEOIP_CITY_DB` / `GEOIP_ASN_DB` | `/geoip/...` | Database paths inside the container. |
 | `TRUSTED_PROXIES` | empty | Comma-separated proxy IPs/CIDRs allowed to supply `X-Forwarded-For`. |
+| `ALLOWED_HOSTS` | empty | Extra DNS hostnames accepted in the HTTP `Host` header. IP literals, single-label names and `*.local`/`*.lan`/`*.home.arpa`/`*.internal` work without this. |
+| `SYSLOG_BUFFER_BYTES` | `67108864` | Total byte cap for the in-memory syslog ring. |
+| `SYSLOG_MAX_THREADS` | `64` | Maximum concurrent syslog request threads. |
 | `HAPROXY_STATS_SOCKET` | empty | Optional read-only HAProxy stats socket as `host:port`. Empty disables Live stats. |
 | `STATS_REFRESH_SECONDS` | `5` | Live stats poll interval. |
 | `STATS_TIMEOUT_SECONDS` | `2` | Live stats connect and read timeout. |
@@ -214,9 +217,10 @@ Internal addresses are masked by default. With `MASK_FULL=true` all masked clien
 - **A local GeoIP lookup.** MaxMind databases are mounted files; client IPs are never sent to MaxMind or anyone else.
 - **Read-only runtime access.** The optional Live stats view connects to a dedicated HAProxy stats socket at `level user` and only sends `show info;show stat`. Bind the socket to a private interface and firewall it to the analytics host; HAProxy stats sockets have no TLS or authentication of their own. Never expose the socket or reuse the admin socket.
 - **Explicit proxy trust.** `X-Forwarded-For` is ignored unless the immediate peer is in `TRUSTED_PROXIES`.
+- **Host allowlist.** Unknown `Host` headers are rejected to block DNS-rebinding reads. IP literals and local names work by default; set `ALLOWED_HOSTS` for a public DNS name.
 - **Internal IP masking.** Private/internal addresses are masked by default in the dashboard and API; public addresses remain visible.
 - **Domain exclusion.** `EXCLUDED_DOMAINS` drops matching HTTP and TLS events before aggregation. `DOMAIN_ONLY_DOMAINS` keeps the events and counts but replaces the request path/query with the domain. Neither mode redacts the source log or persistent syslog store.
-- **Bounded inputs.** Log tail size, visitor rows, individual request rows and syslog message size are all capped.
+- **Bounded inputs.** Log tail size, visitor rows, individual request rows, syslog message size, total syslog buffer bytes and syslog worker threads are all capped.
 - **No embedded third-party report.** HTTP analytics are rendered natively from parsed events; there is no report iframe or external script.
 - **Secret scanning.** Gitleaks runs in CI. The repository contains only synthetic demo data.
 

@@ -99,7 +99,9 @@ def main(argv: list[str] | None = None) -> int:
     syslog_server: SyslogServer | None = None
     if settings.syslog_listen:
         assert settings.syslog_host is not None and settings.syslog_port is not None
-        buffer = SyslogBuffer(settings.syslog_buffer_lines)
+        buffer = SyslogBuffer(
+            settings.syslog_buffer_lines, settings.syslog_buffer_bytes
+        )
         store = (
             SyslogStore(
                 settings.syslog_store_file,
@@ -116,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
             allowed=settings.syslog_allowed_networks,
             buffer=buffer,
             max_message_bytes=settings.syslog_max_message_bytes,
+            max_threads=settings.syslog_max_threads,
             store=store,
             tls_cert=settings.syslog_tls_cert,
             tls_key=settings.syslog_tls_key,

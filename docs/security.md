@@ -97,8 +97,9 @@ the receiver can inject fake events. Mitigations:
 - monitor the rejected/dropped counters in the snapshot metadata;
 - do not expose the syslog port to the internet.
 
-The receiver enforces a maximum message size and a bounded ring buffer, but it
-cannot make an untrusted sender trustworthy.
+The receiver enforces a maximum message size, a bounded line/byte ring buffer
+and a bounded worker-thread pool, but it cannot make an untrusted sender
+trustworthy.
 
 ### 5. Protect the live stats socket
 

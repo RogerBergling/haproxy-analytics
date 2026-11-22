@@ -79,24 +79,44 @@ def read_log_tail(path: Path, max_bytes: int) -> tuple[list[str], dict[str, Any]
 
 
 class SyslogBuffer:
-    """Bounded thread-safe ring of raw syslog lines."""
+    """Bounded thread-safe ring of raw syslog lines.
 
-    def __init__(self, max_lines: int) -> None:
-        self._lines: deque[str] = deque(maxlen=max_lines)
+    Both the line count and the total UTF-8 byte size are capped. The byte
+    cap matters because a sender can otherwise fill the line ring with
+    maximum-size messages and exhaust memory.
+    """
+
+    def __init__(self, max_lines: int, max_bytes: int = 64 * 1024 * 1024) -> None:
+        self._lines: deque[str] = deque()
         self._lock = threading.Lock()
         self.max_lines = max_lines
+        self.max_bytes = max_bytes
+        self._bytes = 0
         self.received = 0
         self.dropped = 0
         self.rejected = 0
+
+    @staticmethod
+    def _size(line: str) -> int:
+        return len(line.encode("utf-8", "replace")) + 1
 
     def append(self, line: str) -> None:
         line = line.strip()
         if not line:
             return
+        size = self._size(line)
         with self._lock:
-            if len(self._lines) == self.max_lines:
+            if size > self.max_bytes:
+                self.dropped += 1
+                return
+            while self._lines and (
+                len(self._lines) >= self.max_lines or self._bytes + size > self.max_bytes
+            ):
+                removed = self._lines.popleft()
+                self._bytes -= self._size(removed)
                 self.dropped += 1
             self._lines.append(line)
+            self._bytes += size
             self.received += 1
 
     def reject(self) -> None:
@@ -110,6 +130,7 @@ class SyslogBuffer:
     def clear(self) -> None:
         with self._lock:
             self._lines.clear()
+            self._bytes = 0
 
     def snapshot(self) -> list[str]:
         with self._lock:
@@ -120,6 +141,8 @@ class SyslogBuffer:
             return {
                 "buffered": len(self._lines),
                 "max_lines": self.max_lines,
+                "buffered_bytes": self._bytes,
+                "max_bytes": self.max_bytes,
                 "received": self.received,
                 "dropped": self.dropped,
                 "rejected": self.rejected,
@@ -194,14 +217,38 @@ class _TCPHandler(socketserver.StreamRequestHandler):
             return
 
 
-class _ThreadingUDPServer(socketserver.ThreadingMixIn, socketserver.UDPServer):
+class _BoundedThreadingMixIn(socketserver.ThreadingMixIn):
+    """ThreadingMixIn with a hard cap on concurrent request threads."""
+
     daemon_threads = True
+
+    def __init__(self, *args: Any, max_threads: int = 64, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._request_slots = threading.BoundedSemaphore(max(1, max_threads))
+
+    def process_request(self, request: Any, client_address: Any) -> None:
+        if not self._request_slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._request_slots.release()
+            raise
+
+    def process_request_thread(self, request: Any, client_address: Any) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._request_slots.release()
+
+
+class _ThreadingUDPServer(_BoundedThreadingMixIn, socketserver.UDPServer):
     allow_reuse_address = True
     state: _SyslogState
 
 
-class _ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
-    daemon_threads = True
+class _ThreadingTCPServer(_BoundedThreadingMixIn, socketserver.TCPServer):
     allow_reuse_address = True
     state: _SyslogState
     ssl_context: ssl.SSLContext | None = None
@@ -233,6 +280,7 @@ class SyslogServer:
     allowed: tuple[IPNetwork, ...]
     buffer: SyslogBuffer
     max_message_bytes: int
+    max_threads: int = 64
     store: SyslogStore | None = None
     tls_cert: Path | None = None
     tls_key: Path | None = None
@@ -265,13 +313,17 @@ class SyslogServer:
 
         if "udp" in self.protocols:
             server_class = _ThreadingUDP6Server if family == socket.AF_INET6 else _ThreadingUDPServer
-            udp = server_class((self.host, self.port), _UDPHandler)
+            udp = server_class(
+                (self.host, self.port), _UDPHandler, max_threads=self.max_threads
+            )
             udp.state = state
             self._add_server(udp, "udp")
 
         if "tcp" in self.protocols:
             server_class = _ThreadingTCP6Server if family == socket.AF_INET6 else _ThreadingTCPServer
-            tcp = server_class((self.host, self.port), _TCPHandler)
+            tcp = server_class(
+                (self.host, self.port), _TCPHandler, max_threads=self.max_threads
+            )
             tcp.state = state
             tcp.ssl_context = self._ssl_context() if self.tls_cert else None
             self._add_server(tcp, "tcp")
