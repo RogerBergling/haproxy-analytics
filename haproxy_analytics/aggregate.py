@@ -16,6 +16,7 @@ from .privacy import (
     mask_ip,
     mask_text_ips,
     select_http_host,
+    strip_query_string,
 )
 
 _UNKNOWN_COUNTRIES = {"Unknown", "Private network", "-"}
@@ -53,6 +54,8 @@ class Aggregator:
         mask_full: bool = False,
         excluded_domains: tuple[str, ...] = (),
         domain_only_domains: tuple[str, ...] = (),
+        http_path_mode: str = "full",
+        strip_query_strings: bool = False,
     ) -> None:
         self.geo = geo
         self.max_visitor_rows = max_visitor_rows
@@ -63,6 +66,8 @@ class Aggregator:
         self.masking_enabled = mask_internal_ips or bool(mask_networks)
         self.excluded_domains = excluded_domains
         self.domain_only_domains = domain_only_domains
+        self.http_path_mode = http_path_mode
+        self.strip_query_strings = strip_query_strings
 
         self.http_total = 0
         self.tls_total = 0
@@ -72,6 +77,7 @@ class Aggregator:
         self.repeated_groups = 0
         self.excluded_events = 0
         self.redacted_paths = 0
+        self.query_strings_stripped = 0
 
         self.http_by_ip: Counter[str] = Counter()
         self.tls_by_ip: Counter[str] = Counter()
@@ -200,6 +206,17 @@ class Aggregator:
                     path=domain_only_path(domain_only_host, event.path),
                 )
                 self.redacted_paths += event.count
+            elif self.http_path_mode == "domain":
+                host = select_http_host(event.hosts, event.path)
+                path = domain_only_path(host, event.path) if host != "-" else "-"
+                event = replace(event, path=path)
+                self.redacted_paths += event.count
+            elif self.strip_query_strings:
+                path = strip_query_string(event.path)
+                if path != event.path:
+                    event = replace(event, path=path)
+                    self.redacted_paths += event.count
+                    self.query_strings_stripped += event.count
             self._add_http(event)
 
     def _add_tls(self, event: TlsEvent) -> None:
@@ -715,6 +732,7 @@ class Aggregator:
                 "events": self.parsed_events,
                 "excluded_events": self.excluded_events,
                 "redacted_paths": self.redacted_paths,
+                "query_strings_stripped": self.query_strings_stripped,
             },
         }
 

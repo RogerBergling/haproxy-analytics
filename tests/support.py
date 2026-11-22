@@ -34,6 +34,8 @@ def base_settings(tmp_path: Path, **overrides: object) -> Settings:
         "mask_full": False,
         "excluded_domains": (),
         "domain_only_domains": (),
+        "http_path_mode": "full",
+        "strip_query_strings": False,
         "refresh_seconds": 60,
     }
     values.update(overrides)

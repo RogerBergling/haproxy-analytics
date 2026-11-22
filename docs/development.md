@@ -104,7 +104,8 @@ The test suite covers:
 - live stats parsing, response-size limits, row caps, failure fallback and
   omission of server addresses;
 - domain normalization/matching, captured Host parsing, request-host selection,
-  exclusion before aggregation and domain-only path redaction;
+  exclusion before aggregation, domain-only path redaction, global path mode
+  and query-string stripping;
 - HTTP detail counters, protocol/status classes, request rows and per-IP row caps;
 - internal IP masking, masked visitor grouping and capped individual request rows;
 - persistent syslog store append, rotation, clear and API token checks;

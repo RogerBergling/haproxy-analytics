@@ -13,6 +13,7 @@ from haproxy_analytics.privacy import (
     normalize_domain,
     normalize_host,
     select_http_host,
+    strip_query_string,
 )
 
 
@@ -124,6 +125,14 @@ class PrivacyTests(unittest.TestCase):
         )
         self.assertEqual(select_http_host(("203.0.113.5",), "/private"), "203.0.113.5")
         self.assertEqual(select_http_host((), "/private"), "-")
+
+    def test_strip_query_string(self) -> None:
+        self.assertEqual(strip_query_string("/app/page?session=SECRET"), "/app/page")
+        self.assertEqual(
+            strip_query_string("https://sendpass.example.com/path?token=SECRET"),
+            "https://sendpass.example.com/path",
+        )
+        self.assertEqual(strip_query_string("/plain"), "/plain")
 
     def test_domain_only_path(self) -> None:
         self.assertEqual(

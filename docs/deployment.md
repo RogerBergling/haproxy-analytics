@@ -83,6 +83,8 @@ uses the shell environment or CLI flags, not `.env` automatically.
 | `MASK_FULL` | `false` | Use one full mask (`x.x.x.x` / `x:x:x:x:x:x:x:x`) instead of prefix masks. |
 | `EXCLUDED_DOMAINS` | empty | Comma-separated domains to drop before aggregation. Matches the domain and all subdomains. HTTP matching needs a captured Host header. |
 | `DOMAIN_ONLY_DOMAINS` | empty | Comma-separated domains to keep at domain-only granularity. Paths/query strings are replaced with the domain; counts remain. Must not overlap or contain an `EXCLUDED_DOMAINS` entry. |
+| `HTTP_PATH_MODE` | `full` | `full` keeps paths; `domain` hides every HTTP path and keeps domain-level statistics. |
+| `STRIP_QUERY_STRINGS` | `false` | Remove `?query` strings from every HTTP path while keeping the path. |
 | `GEOIP_DIR` | `./geoip` | Host directory mounted at `/geoip` read-only. |
 | `GEOIP_CITY_DB` | `/geoip/GeoLite2-City.mmdb` | City database path inside the container. |
 | `GEOIP_ASN_DB` | `/geoip/GeoLite2-ASN.mmdb` | ASN database path inside the container. |
@@ -258,7 +260,28 @@ backend statistics still count the event.
 
 The current counts are shown in the **Security & privacy** tab and in
 `meta.privacy` on `/api/snapshot`: `excluded_domains`, `domain_only_domains`,
-`excluded_events` and `redacted_paths`.
+`excluded_events`, `redacted_paths` and `query_strings_stripped`.
+
+### Global HTTP path privacy
+
+For a global policy independent of domain lists:
+
+```dotenv
+# Hide every HTTP path; keep domain-level request/status/byte counts.
+HTTP_PATH_MODE=domain
+
+# Or keep paths but remove every query string.
+STRIP_QUERY_STRINGS=true
+```
+
+- `HTTP_PATH_MODE=domain` replaces every HTTP path with the domain label, or
+  `-` when the host is unknown. `DOMAIN_ONLY_DOMAINS` becomes redundant.
+- `STRIP_QUERY_STRINGS=true` changes `/path?session=secret` to `/path`. It
+  applies globally when path mode is `full`.
+- If both are set, `HTTP_PATH_MODE=domain` takes precedence because the path is
+  already reduced to the domain.
+- These settings do not redact raw logs, rotated files or the persistent syslog
+  store.
 
 ### Syslog receiver
 

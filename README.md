@@ -185,6 +185,8 @@ Copy [`.env.example`](.env.example) to `.env`. The most important settings:
 | `MASK_FULL` | `false` | Use one full mask (`x.x.x.x` / `x:x:x:x:x:x:x:x`) instead of prefix masks. |
 | `EXCLUDED_DOMAINS` | empty | Comma-separated domains to drop before aggregation. Matches the domain and all subdomains. HTTP matching needs a captured Host header. |
 | `DOMAIN_ONLY_DOMAINS` | empty | Comma-separated domains to keep at domain-only granularity. Request paths and query strings are replaced with the domain; counts remain. Must not overlap or contain an `EXCLUDED_DOMAINS` entry. |
+| `HTTP_PATH_MODE` | `full` | `full` keeps request paths; `domain` hides every HTTP path and keeps domain-level statistics. |
+| `STRIP_QUERY_STRINGS` | `false` | Remove `?query` strings from every HTTP request path while keeping the path itself. |
 | `GEOIP_DIR` | `./geoip` | Host directory containing `GeoLite2-*.mmdb`. |
 | `GEOIP_CITY_DB` / `GEOIP_ASN_DB` | `/geoip/...` | Database paths inside the container. |
 | `TRUSTED_PROXIES` | empty | Comma-separated proxy IPs/CIDRs allowed to supply `X-Forwarded-For`. |
@@ -206,7 +208,7 @@ The full reference is in [docs/deployment.md](docs/deployment.md). Never commit 
 
 Internal addresses are masked by default. With `MASK_FULL=true` all masked clients collapse into one `x.x.x.x` row, so per-IP HTTP detail is lost. To see individual private IPs, set `MASK_INTERNAL_IPS=false`, clear `MASK_NETWORKS` and set `MASK_FULL=false`, then restart. Keep the dashboard behind the authenticated HAProxy frontend.
 
-`EXCLUDED_DOMAINS` drops matching HTTP/TLS events before aggregation. `DOMAIN_ONLY_DOMAINS` instead keeps the event and replaces the request path/query with a domain label such as `sendpass.example.com/` or `https://sendpass.example.com/`, so request, status and byte counts remain. TLS events match on SNI. HTTP events match on a captured `Host` header or an absolute request URL; add `capture request header Host len 64` to the HAProxy frontend for ordinary HTTP requests. Both modes filter the dashboard/API only: raw logs, rotated files and the persistent syslog store are not redacted.
+`EXCLUDED_DOMAINS` drops matching HTTP/TLS events before aggregation. `DOMAIN_ONLY_DOMAINS` instead keeps the event and replaces the request path/query with a domain label such as `sendpass.example.com/` or `https://sendpass.example.com/`, so request, status and byte counts remain. `HTTP_PATH_MODE=domain` applies the same domain-only treatment to every HTTP request. `STRIP_QUERY_STRINGS=true` keeps the path but removes every `?query` string. TLS events match on SNI. HTTP events match on a captured `Host` header or an absolute request URL; add `capture request header Host len 64` to the HAProxy frontend for ordinary HTTP requests. All of these modes filter the dashboard/API only: raw logs, rotated files and the persistent syslog store are not redacted.
 
 ## Security model
 
@@ -219,7 +221,7 @@ Internal addresses are masked by default. With `MASK_FULL=true` all masked clien
 - **Explicit proxy trust.** `X-Forwarded-For` is ignored unless the immediate peer is in `TRUSTED_PROXIES`.
 - **Host allowlist.** Unknown `Host` headers are rejected to block DNS-rebinding reads. IP literals and local names work by default; set `ALLOWED_HOSTS` for a public DNS name.
 - **Internal IP masking.** Private/internal addresses are masked by default in the dashboard and API; public addresses remain visible.
-- **Domain exclusion.** `EXCLUDED_DOMAINS` drops matching HTTP and TLS events before aggregation. `DOMAIN_ONLY_DOMAINS` keeps the events and counts but replaces the request path/query with the domain. Neither mode redacts the source log or persistent syslog store.
+- **Domain and path privacy.** `EXCLUDED_DOMAINS` drops matching HTTP and TLS events. `DOMAIN_ONLY_DOMAINS` keeps selected domains at domain-only granularity. `HTTP_PATH_MODE=domain` hides every HTTP path while keeping domain/status/byte counts, and `STRIP_QUERY_STRINGS=true` removes query strings globally. None of these modes redact the source log or persistent syslog store.
 - **Bounded inputs.** Log tail size, visitor rows, individual request rows, syslog message size, total syslog buffer bytes and syslog worker threads are all capped.
 - **No embedded third-party report.** HTTP analytics are rendered natively from parsed events; there is no report iframe or external script.
 - **Secret scanning.** Gitleaks runs in CI. The repository contains only synthetic demo data.

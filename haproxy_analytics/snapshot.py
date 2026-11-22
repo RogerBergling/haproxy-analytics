@@ -34,8 +34,11 @@ def _empty_payload(message: str) -> dict[str, Any]:
                 "mask_full": False,
                 "excluded_domains": 0,
                 "domain_only_domains": 0,
+                "http_path_mode": "full",
+                "strip_query_strings": False,
                 "excluded_events": 0,
                 "redacted_paths": 0,
+                "query_strings_stripped": 0,
             },
             "parser": {
                 "unparsed_lines": 0,
@@ -43,6 +46,7 @@ def _empty_payload(message: str) -> dict[str, Any]:
                 "events": 0,
                 "excluded_events": 0,
                 "redacted_paths": 0,
+                "query_strings_stripped": 0,
             },
             "warnings": [message],
             "duration_ms": 0,
@@ -86,6 +90,7 @@ def _empty_payload(message: str) -> dict[str, Any]:
             "events": 0,
             "excluded_events": 0,
             "redacted_paths": 0,
+            "query_strings_stripped": 0,
         },
     }
 
@@ -240,6 +245,8 @@ class SnapshotService:
                 mask_full=self.settings.mask_full,
                 excluded_domains=self.settings.excluded_domains,
                 domain_only_domains=self.settings.domain_only_domains,
+                http_path_mode=self.settings.http_path_mode,
+                strip_query_strings=self.settings.strip_query_strings,
             )
             try:
                 for line in lines:
@@ -285,8 +292,11 @@ class SnapshotService:
                     "mask_full": self.settings.mask_full,
                     "excluded_domains": len(self.settings.excluded_domains),
                     "domain_only_domains": len(self.settings.domain_only_domains),
+                    "http_path_mode": self.settings.http_path_mode,
+                    "strip_query_strings": self.settings.strip_query_strings,
                     "excluded_events": data["parser"]["excluded_events"],
                     "redacted_paths": data["parser"]["redacted_paths"],
+                    "query_strings_stripped": data["parser"]["query_strings_stripped"],
                 },
                 "parser": data["parser"],
                 "warnings": warnings,

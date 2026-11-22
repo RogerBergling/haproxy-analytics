@@ -76,7 +76,7 @@ Check the result:
 
 ```bash
 curl -fsS http://127.0.0.1:8009/api/snapshot \
-  | python3 -c 'import json,sys; p=json.load(sys.stdin)["meta"]["privacy"]; print(p["excluded_domains"], p["domain_only_domains"], p["excluded_events"], p["redacted_paths"])'
+  | python3 -c 'import json,sys; p=json.load(sys.stdin)["meta"]["privacy"]; print(p["excluded_domains"], p["domain_only_domains"], p["http_path_mode"], p["strip_query_strings"], p["excluded_events"], p["redacted_paths"], p["query_strings_stripped"])'
 ```
 
 - SNI matching works for TLS/SNI events.
@@ -87,7 +87,9 @@ curl -fsS http://127.0.0.1:8009/api/snapshot \
 - Domain-only events keep request/status/byte/backend counts, but show
   `sendpass.example.com/` or `https://sendpass.example.com/` instead of the
   original path and query string.
-- The two lists must not overlap or contain each other.
+- `HTTP_PATH_MODE=domain` applies domain-only labels to every HTTP request.
+- `STRIP_QUERY_STRINGS=true` keeps paths but removes every query string.
+- The two domain lists must not overlap or contain each other.
 - Raw log lines, rotated files and `SYSLOG_STORE_FILE` are not redacted. Use
   source-side log controls and retention for secrets that must not be written.
 

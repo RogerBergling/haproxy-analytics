@@ -148,6 +148,82 @@ class SnapshotTests(unittest.TestCase):
             ["public.example.com", "sendpass.example.com", "sendpass.example.com"],
         )
 
+    def test_global_domain_path_mode_hides_all_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            log = temp_path / "haproxy.log"
+            log.write_text(
+                'Nov 18 00:00:00 demo haproxy[1]: 203.0.113.10:1234 '
+                '[18/Nov/2026:00:00:00.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
+                '{public.example.com} {} "GET /account/session/SECRET?x=1 HTTP/1.1"\n'
+                'Nov 18 00:00:01 demo haproxy[1]: 203.0.113.11:1234 '
+                '[18/Nov/2026:00:00:01.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
+                '{sendpass.example.com} {} "GET https://sendpass.example.com/secret?x=1 HTTP/1.1"\n'
+                'Nov 18 00:00:02 demo haproxy[1]: 203.0.113.12:1234 '
+                '[18/Nov/2026:00:00:02.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
+                '"GET /no-host/SECRET?x=1 HTTP/1.1"\n',
+                encoding="utf-8",
+            )
+            settings = demo_settings(
+                temp_path,
+                demo=False,
+                log_file=log,
+                http_path_mode="domain",
+            )
+            service = SnapshotService(settings)
+            service.refresh_once()
+            snapshot = service.snapshot()
+
+        payload = json.dumps(snapshot)
+        self.assertNotIn("SECRET", payload)
+        self.assertIn("public.example.com/", payload)
+        self.assertIn("https://sendpass.example.com/", payload)
+        self.assertNotIn("/account/", payload)
+        self.assertEqual(snapshot["kpis"]["http_total"], 3)
+        self.assertEqual(snapshot["parser"]["redacted_paths"], 3)
+        self.assertEqual(snapshot["meta"]["privacy"]["http_path_mode"], "domain")
+        self.assertEqual(
+            [row["host"] for row in snapshot["http"]["recent"]],
+            ["-", "sendpass.example.com", "public.example.com"],
+        )
+
+    def test_strip_query_strings_keeps_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            log = temp_path / "haproxy.log"
+            log.write_text(
+                'Nov 18 00:00:00 demo haproxy[1]: 203.0.113.10:1234 '
+                '[18/Nov/2026:00:00:00.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
+                '{public.example.com} {} "GET /app/page?session=SECRET HTTP/1.1"\n'
+                'Nov 18 00:00:01 demo haproxy[1]: 203.0.113.11:1234 '
+                '[18/Nov/2026:00:00:01.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
+                '{sendpass.example.com} {} "GET https://sendpass.example.com/path?token=SECRET HTTP/1.1"\n'
+                'Nov 18 00:00:02 demo haproxy[1]: 203.0.113.12:1234 '
+                '[18/Nov/2026:00:00:02.000] ft_https bk_app/app1 0/0/1/2/3 200 1 '
+                '"GET /plain HTTP/1.1"\n',
+                encoding="utf-8",
+            )
+            settings = demo_settings(
+                temp_path,
+                demo=False,
+                log_file=log,
+                strip_query_strings=True,
+            )
+            service = SnapshotService(settings)
+            service.refresh_once()
+            snapshot = service.snapshot()
+
+        payload = json.dumps(snapshot)
+        self.assertNotIn("SECRET", payload)
+        self.assertIn("/app/page", payload)
+        self.assertIn("https://sendpass.example.com/path", payload)
+        self.assertIn("/plain", payload)
+        self.assertEqual(snapshot["kpis"]["http_total"], 3)
+        self.assertEqual(snapshot["parser"]["redacted_paths"], 2)
+        self.assertEqual(snapshot["parser"]["query_strings_stripped"], 2)
+        self.assertTrue(snapshot["meta"]["privacy"]["strip_query_strings"])
+        self.assertEqual(snapshot["meta"]["privacy"]["query_strings_stripped"], 2)
+
     def test_internal_ip_in_http_path_is_masked(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_path = Path(temp)

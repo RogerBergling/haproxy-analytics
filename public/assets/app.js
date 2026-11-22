@@ -1145,18 +1145,18 @@ function renderDomainFilter() {
   const domainOnly = Number(privacy.domain_only_domains) || 0;
   const events = Number(privacy.excluded_events) || 0;
   const redacted = Number(privacy.redacted_paths) || 0;
-  if (!domains && !domainOnly) {
-    node.textContent = "No domain filtering is active. Set EXCLUDED_DOMAINS to drop domains entirely or DOMAIN_ONLY_DOMAINS to keep domain-level statistics with the URI removed.";
+  const pathMode = privacy.http_path_mode || "full";
+  const stripQuery = Boolean(privacy.strip_query_strings);
+  if (!domains && !domainOnly && pathMode === "full" && !stripQuery) {
+    node.textContent = "No path filtering is active. Set EXCLUDED_DOMAINS to drop domains, DOMAIN_ONLY_DOMAINS to hide specific URIs, HTTP_PATH_MODE=domain to hide all HTTP paths, or STRIP_QUERY_STRINGS=true to remove query strings.";
     return;
   }
   const parts = [];
   if (domains) parts.push(`${fmt(domains)} domain(s) excluded entirely.`);
-  if (domainOnly) {
-    parts.push(
-      `${fmt(domainOnly)} domain(s) kept at domain-only granularity; ${fmt(redacted)} request path(s) redacted.`
-    );
-  }
-  parts.push(`${fmt(events)} event(s) skipped in this snapshot.`);
+  if (domainOnly) parts.push(`${fmt(domainOnly)} domain(s) kept at domain-only granularity.`);
+  if (pathMode === "domain") parts.push("All HTTP request paths are reduced to domain-only labels.");
+  if (stripQuery) parts.push("Query strings are stripped from HTTP request paths.");
+  parts.push(`${fmt(events)} event(s) skipped and ${fmt(redacted)} path(s) redacted in this snapshot.`);
   parts.push(
     "HTTP matching uses a captured Host header or an absolute URL. Raw log lines and the persistent syslog store are not redacted."
   );

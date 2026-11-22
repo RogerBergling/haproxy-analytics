@@ -82,6 +82,10 @@ Two lists are applied in the aggregator before any counters are incremented:
 - `DOMAIN_ONLY_DOMAINS` keeps matching HTTP events but replaces the request
   target with a domain label such as `sendpass.example.com/` or
   `https://sendpass.example.com/`, removing the path and query string.
+- `HTTP_PATH_MODE=domain` applies the same domain-only replacement to every
+  HTTP request.
+- `STRIP_QUERY_STRINGS=true` removes the query string from every HTTP path while
+  keeping the path.
 
 TLS events match on SNI. HTTP events match on captured `Host` header values or
 the host of an absolute request URL. The match is exact-or-subdomain and
@@ -102,8 +106,9 @@ store and external log files are not redacted by these filters.
 - `meta`: generation time, refresh interval, version, active sources, GeoIP
   availability, syslog store status, privacy counts, parser statistics and
   warnings. `meta.privacy.excluded_domains`, `domain_only_domains`,
-  `excluded_events` and `redacted_paths` describe the domain filters without
-  exposing the configured domain lists.
+  `http_path_mode`, `strip_query_strings`, `excluded_events`, `redacted_paths`
+  and `query_strings_stripped` describe the privacy filters without exposing
+  the configured domain lists.
 - `kpis`: HTTP requests, TLS connections, unique IPs, countries, 4xx/5xx,
   bandwidth, geolocated points, SNI hostnames and backends.
 - `http`: methods, statuses, status classes, protocols, hourly distribution,
@@ -117,8 +122,8 @@ store and external log files are not redacted by these filters.
   `MASK_INTERNAL_IPS` is enabled, non-global addresses are masked and rows are
   grouped by their masked prefix; `visitors.masked` and `visitors.raw_total`
   describe the result.
-- `parser`: unparsed line, repeated-group, excluded-event and redacted-path
-  counts.
+- `parser`: unparsed line, repeated-group, excluded-event, redacted-path and
+  query-string-stripped counts.
 
 The API is same-origin and protected by the same network boundary as the HTML.
 It is not a public API.

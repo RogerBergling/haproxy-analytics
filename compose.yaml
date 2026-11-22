@@ -29,6 +29,8 @@ services:
       MASK_FULL: ${MASK_FULL:-false}
       EXCLUDED_DOMAINS: ${EXCLUDED_DOMAINS:-}
       DOMAIN_ONLY_DOMAINS: ${DOMAIN_ONLY_DOMAINS:-}
+      HTTP_PATH_MODE: ${HTTP_PATH_MODE:-full}
+      STRIP_QUERY_STRINGS: ${STRIP_QUERY_STRINGS:-false}
       GEOIP_CITY_DB: ${GEOIP_CITY_DB:-/geoip/GeoLite2-City.mmdb}
       GEOIP_ASN_DB: ${GEOIP_ASN_DB:-/geoip/GeoLite2-ASN.mmdb}
       DEMO_MODE: ${DEMO_MODE:-false}

@@ -301,6 +301,12 @@ Two optional comma-separated lists control domain-level handling:
   request path and query string with a domain label such as
   `sendpass.example.com/` or `https://sendpass.example.com/`.
 
+Two global settings control path detail:
+
+- `HTTP_PATH_MODE=domain` reduces every HTTP path to a domain label, or `-` when
+  no host is known.
+- `STRIP_QUERY_STRINGS=true` keeps paths but removes all query strings.
+
 A domain may appear in one list only; overlapping or parent/child combinations are rejected at startup.
 
 - TLS/SNI events are matched by SNI.
@@ -320,9 +326,9 @@ HTTP matching requires the Host header in the log:
 capture request header Host len 64
 ```
 
-**Limitations:** neither mode is redaction. Raw HAProxy log lines, the optional
-persistent syslog store, rotated files and backups still contain the original
-data. If a URL itself contains a secret, prevent or redact that logging at the
+**Limitations:** these filters are not redaction. Raw HAProxy log lines, the
+optional persistent syslog store, rotated files and backups still contain the
+original data. If a URL itself contains a secret, prevent or redact that logging at the
 HAProxy/rsyslog source and apply the same retention rules as the log. See
 [haproxy.md](haproxy.md#excluding-or-reducing-domains) for a source-side ACL
 example. The app reports only counts, not the configured domain lists, in

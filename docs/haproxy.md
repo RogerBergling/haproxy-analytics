@@ -103,6 +103,9 @@ For `DOMAIN_ONLY_DOMAINS`, an origin-form request is displayed as
 `https://sendpass.example.com/`. The query string is removed, but request,
 status, byte and backend counts still include the event.
 
+For a global policy, use `HTTP_PATH_MODE=domain` to hide every HTTP path, or
+`STRIP_QUERY_STRINGS=true` to keep paths but remove all query strings.
+
 For HTTP matching, capture the Host header in the HTTP frontend:
 
 ```haproxy

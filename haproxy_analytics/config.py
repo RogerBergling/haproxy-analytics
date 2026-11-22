@@ -163,6 +163,8 @@ class Settings:
     mask_full: bool
     excluded_domains: tuple[str, ...]
     domain_only_domains: tuple[str, ...]
+    http_path_mode: str
+    strip_query_strings: bool
     geoip_city_db: Path
     geoip_asn_db: Path
     trusted_proxies: tuple[IPNetwork, ...]
@@ -257,6 +259,13 @@ class Settings:
                 "each other: " + ", ".join(sorted(set(overlaps)))
             )
 
+        http_path_mode = _env("HTTP_PATH_MODE", "full").lower() or "full"
+        if http_path_mode not in {"full", "domain"}:
+            raise ConfigError(
+                f"HTTP_PATH_MODE must be 'full' or 'domain', got {http_path_mode!r}"
+            )
+        strip_query_strings = _env_bool("STRIP_QUERY_STRINGS", False)
+
         app_port = _env_int("APP_PORT", 8080, 1)
         if app_port > 65535:
             raise ConfigError(f"APP_PORT must be between 1 and 65535, got {app_port}")
@@ -277,6 +286,8 @@ class Settings:
             mask_full=_env_bool("MASK_FULL", False),
             excluded_domains=excluded_domains,
             domain_only_domains=domain_only_domains,
+            http_path_mode=http_path_mode,
+            strip_query_strings=strip_query_strings,
             geoip_city_db=_resolve_path(_env("GEOIP_CITY_DB"), Path("/geoip/GeoLite2-City.mmdb")),
             geoip_asn_db=_resolve_path(_env("GEOIP_ASN_DB"), Path("/geoip/GeoLite2-ASN.mmdb")),
             trusted_proxies=trusted,

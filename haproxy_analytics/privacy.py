@@ -140,6 +140,12 @@ def select_http_host(hosts: tuple[str, ...], path: str = "") -> str:
     return normalized_hosts[0] if normalized_hosts else "-"
 
 
+def strip_query_string(path: str) -> str:
+    """Remove a query string and fragment from an HTTP request target."""
+
+    return path.split("#", 1)[0].split("?", 1)[0]
+
+
 def domain_only_path(host: str, path: str) -> str:
     """Replace a request target with a domain-only label.
 

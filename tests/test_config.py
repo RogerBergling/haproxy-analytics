@@ -21,6 +21,8 @@ class ConfigTests(unittest.TestCase):
         self.assertFalse(settings.mask_full)
         self.assertEqual(settings.excluded_domains, ())
         self.assertEqual(settings.domain_only_domains, ())
+        self.assertEqual(settings.http_path_mode, "full")
+        self.assertFalse(settings.strip_query_strings)
         self.assertIsNone(settings.syslog_store_file)
 
     def test_empty_log_file_disables_file_source(self) -> None:
@@ -65,6 +67,28 @@ class ConfigTests(unittest.TestCase):
             settings.domain_only_domains,
             ("sendpass.example", "private.example.org"),
         )
+
+    def test_global_path_privacy(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "HTTP_PATH_MODE": "domain",
+                "STRIP_QUERY_STRINGS": "true",
+            },
+            clear=True,
+        ):
+            settings = Settings.from_env()
+        self.assertEqual(settings.http_path_mode, "domain")
+        self.assertTrue(settings.strip_query_strings)
+
+    def test_invalid_path_mode(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"HTTP_PATH_MODE": "hidden"},
+            clear=True,
+        ):
+            with self.assertRaises(ConfigError):
+                Settings.from_env()
 
     def test_excluded_and_domain_only_overlap_is_rejected(self) -> None:
         pairs = (
