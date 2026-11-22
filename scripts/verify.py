@@ -36,6 +36,7 @@ REQUIRED = [
     "public/index.html",
     "public/assets/app.css",
     "public/assets/app.js",
+    "public/assets/theme-init.js",
     "public/assets/world-dark.svg",
     "public/assets/world-light.svg",
     "examples/demo-haproxy.log",
@@ -190,6 +191,10 @@ def main() -> int:
         fail(f"external URL in app.js: {url}", errors)
 
     html = (ROOT / "public/index.html").read_text(encoding="utf-8")
+    if "/theme.js" not in html:
+        fail("index.html does not load /theme.js", errors)
+    if "/assets/theme-init.js" not in html:
+        fail("index.html does not load the pre-paint theme init", errors)
     if re.search(r"<script(?![^>]*\bsrc=)[^>]*>", html):
         fail("index.html contains an inline script", errors)
     if re.search(r"\son[a-z]+\s*=", html, re.IGNORECASE):

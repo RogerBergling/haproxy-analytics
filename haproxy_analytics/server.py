@@ -6,6 +6,7 @@ import ipaddress
 import json
 import logging
 import mimetypes
+import os
 import secrets
 import sys
 from http import HTTPStatus
@@ -22,6 +23,19 @@ from .snapshot import SnapshotService
 from .version import version_info
 
 LOGGER = logging.getLogger(__name__)
+
+APP_THEME_VALUES = {"dark", "light", "system"}
+APP_THEME_ALIASES = {"auto": "system", "white": "light"}
+
+
+def _theme_default() -> str:
+    value = os.environ.get("APP_THEME", "dark").strip().lower()
+    value = APP_THEME_ALIASES.get(value, value)
+    return value if value in APP_THEME_VALUES else "dark"
+
+
+APP_THEME = _theme_default()
+THEME_JS = f'window.__APP_THEME__ = "{APP_THEME}";\n'
 
 MAIN_CSP = (
     "default-src 'none'; "
@@ -264,6 +278,15 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
     def _serve_version(self, *, head_only: bool = False) -> None:
         self._send_json(version_info(), head_only=head_only)
 
+    def _serve_theme(self, *, head_only: bool = False) -> None:
+        body = THEME_JS.encode("utf-8")
+        self._send_bytes(
+            HTTPStatus.OK,
+            body,
+            "text/javascript; charset=utf-8",
+            head_only=head_only,
+        )
+
     def _serve_clear_token(self, *, head_only: bool = False) -> None:
         self._send_json({"token": self.server.clear_token}, head_only=head_only)
 
@@ -295,6 +318,8 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
             self._serve_health()
         elif path == "/version.json":
             self._serve_version()
+        elif path == "/theme.js":
+            self._serve_theme()
         elif path == "/api/clear-token":
             self._serve_clear_token()
         elif path.startswith("/assets/") or path in {f"/{name}" for name in STATIC_ROOT_FILES}:
@@ -316,6 +341,8 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
             self._serve_health(head_only=True)
         elif path == "/version.json":
             self._serve_version(head_only=True)
+        elif path == "/theme.js":
+            self._serve_theme(head_only=True)
         elif path == "/api/clear-token":
             self._serve_clear_token(head_only=True)
         elif path.startswith("/assets/") or path in {f"/{name}" for name in STATIC_ROOT_FILES}:

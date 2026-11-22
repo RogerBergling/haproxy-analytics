@@ -134,6 +134,36 @@ The log file can be mounted from the HAProxy host, or forwarded from another ser
 
 The complete comparison, forwarding examples and security requirements are in [docs/external-logs.md](docs/external-logs.md).
 
+## Theme modes
+
+`APP_THEME` sets the first-visit theme. The theme toggle saves the visitor's
+explicit choice, which overrides this default.
+
+| Value | Behavior |
+|---|---|
+| `dark` | Dark theme (default) |
+| `light` | Light/white theme |
+| `system` | Follow the browser/OS `prefers-color-scheme` |
+
+Set it in `.env` or Compose:
+
+```yaml
+environment:
+  APP_THEME: ${APP_THEME:-dark}
+```
+
+Invalid values fall back to `dark`. The default is served by `/theme.js` and
+applied before first paint, so there is no theme flash.
+
+## Screenshots
+
+| Dark theme | Light theme |
+| --- | --- |
+| ![Dashboard in dark theme](docs/screenshots/overview-dark.png) | ![Dashboard in light theme](docs/screenshots/overview-light.png) |
+
+The screenshots use the bundled synthetic demo log. GeoIP is empty because no
+MaxMind database is mounted in the demo.
+
 ## Configuration
 
 Copy [`.env.example`](.env.example) to `.env`. The most important settings:

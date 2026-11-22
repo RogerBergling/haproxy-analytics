@@ -69,6 +69,9 @@ def main() -> int:
             status, _headers, _body = request(port, "GET", "/version.json")
             checks.append(("version API", status == 200))
 
+            status, _headers, body = request(port, "GET", "/theme.js")
+            checks.append(("theme API", status == 200 and b"window.__APP_THEME__" in body))
+
             for asset in ("/assets/app.css", "/assets/app.js", "/assets/world-dark.svg", "/favicon.svg"):
                 status, _headers, _body = request(port, "GET", asset)
                 checks.append((asset, status == 200))

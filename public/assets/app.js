@@ -1363,7 +1363,14 @@ function setupTheme() {
     theme = null;
   }
   if (theme !== "light" && theme !== "dark") {
-    theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    const configured = window.__APP_THEME__;
+    if (configured === "light" || configured === "dark") {
+      theme = configured;
+    } else if (configured === "system") {
+      theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    } else {
+      theme = "dark";
+    }
   }
   applyTheme(theme);
   const toggle = $("#theme-toggle");
