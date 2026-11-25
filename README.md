@@ -6,6 +6,9 @@
 
 **Read-only HAProxy traffic intelligence: HTTP requests, TLS/SNI connections, client geography, ASN networks, live runtime counters and a searchable visitor table — without shipping logs to a third party.**
 
+**Project facts (2026-11-25):** version **0.6.0** · Python 3.11+ standard-library
+server + browser SPA · 116 unit tests and an HTTP smoke test · MIT licensed.
+
 HAProxy Analytics is a small self-hosted service. It reads HAProxy logs from a mounted file or an optional syslog receiver, optionally polls a dedicated read-only HAProxy stats socket, enriches client addresses with local MaxMind GeoLite2 databases, and serves a dark, responsive dashboard. The container has no database or upload endpoint. Syslog history is memory-only by default; an optional dedicated data volume persists it across restarts. The browser makes no third-party requests.
 
 > **The dashboard contains client IP addresses, hostnames and requested paths. It has no built-in login.** Run it behind HAProxy with TLS and authentication. The default Compose file binds the published port to `127.0.0.1`.
@@ -162,7 +165,9 @@ applied before first paint, so there is no theme flash.
 | ![Dashboard in dark theme](docs/screenshots/overview-dark.png) | ![Dashboard in light theme](docs/screenshots/overview-light.png) |
 
 The screenshots use the bundled synthetic demo log. GeoIP is empty because no
-MaxMind database is mounted in the demo.
+MaxMind database is mounted in the demo. Both captures show the 0.5.0 build
+badge; the current version is 0.6.0. Regenerate them when a browser is
+available.
 
 ## Configuration
 
@@ -222,9 +227,24 @@ Internal addresses are masked by default. With `MASK_FULL=true` all masked clien
 - **Host allowlist.** Unknown `Host` headers are rejected to block DNS-rebinding reads. IP literals and local names work by default; set `ALLOWED_HOSTS` for a public DNS name.
 - **Internal IP masking.** Private/internal addresses are masked by default in the dashboard and API; public addresses remain visible.
 - **Domain and path privacy.** `EXCLUDED_DOMAINS` drops matching HTTP and TLS events. `DOMAIN_ONLY_DOMAINS` keeps selected domains at domain-only granularity. `HTTP_PATH_MODE=domain` hides every HTTP path while keeping domain/status/byte counts, and `STRIP_QUERY_STRINGS=true` removes query strings globally. None of these modes redact the source log or persistent syslog store.
-- **Bounded inputs.** Log tail size, visitor rows, individual request rows, syslog message size, total syslog buffer bytes and syslog worker threads are all capped.
+- **Bounded inputs.** Log tail size, visitor rows, individual request rows, syslog message size, total syslog buffer bytes, syslog worker threads, HTTP workers and per-snapshot aggregation cardinality (IPs, paths, SNIs and backends) are all capped. Excess keys collapse into one `(other)` bucket.
+- **Private persistent syslog history.** The optional syslog store is created with mode `0600` in a `0700` directory; it contains client IPs, hostnames and paths.
+- **HTTP server limits.** The dashboard server has a 15-second socket timeout and a 32-connection worker cap, so a slowloris-style client cannot pin unbounded threads.
 - **No embedded third-party report.** HTTP analytics are rendered natively from parsed events; there is no report iframe or external script.
 - **Secret scanning.** Gitleaks runs in CI. The repository contains only synthetic demo data.
+
+### Verify the deployment is actually protected
+
+The app cannot enforce the reverse proxy's login. After deployment, check that
+the snapshot API is not publicly readable:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://your-host/api/snapshot
+```
+
+Expect `401`, `403` or a login redirect — **not** `200`. A `200` response means
+client IPs, hostnames, paths and possibly query data are exposed. Put the
+dashboard behind HAProxy authentication or stop the listener immediately.
 
 Read [SECURITY.md](SECURITY.md) and [docs/security.md](docs/security.md) before exposing the dashboard.
 
@@ -274,6 +294,13 @@ The CI workflow runs tests on Python 3.11 and 3.12, verifies the repository, run
 - Replacing a central log store or building a long-term multi-node archive.
 - Changing HAProxy runtime state (enable/disable servers, weights or sessions). Live stats are read-only.
 - Sending analytics, GeoIP lookups or telemetry to a third party.
+
+## AI assistance
+
+Developed with AI assistance and human review. The maintainer defines the
+requirements, threat model and acceptance criteria; AI helps write and refactor
+code; the maintainer runs, tests and verifies the result. The software is
+provided as-is, without warranty.
 
 ## License
 

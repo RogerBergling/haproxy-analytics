@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from haproxy_analytics.aggregate import Aggregator
 from haproxy_analytics.logsource import SyslogBuffer, SyslogServer
 from haproxy_analytics.snapshot import SnapshotService
 
@@ -14,6 +15,11 @@ from tests.support import DEMO_LOG, PROJECT_ROOT, demo_settings
 
 
 class SnapshotTests(unittest.TestCase):
+    def test_aggregation_cardinality_cap(self) -> None:
+        self.assertEqual(Aggregator._capped_key({}, "first", 1), "first")
+        self.assertEqual(Aggregator._capped_key({"first": 1}, "second", 1), "(other)")
+        self.assertEqual(Aggregator._capped_key({"first": 1}, "first", 1), "first")
+
     def test_demo_snapshot_counts(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             service = SnapshotService(demo_settings(Path(temp)))

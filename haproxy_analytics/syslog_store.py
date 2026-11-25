@@ -39,8 +39,19 @@ class SyslogStore:
         return [Path(f"{self.path}.{index}") for index in range(1, self.backups + 1)]
 
     def _open_locked(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._handle = self.path.open("a", encoding="utf-8", errors="replace")
+        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        # The log contains client IPs, SNI/hostnames and paths. Create it
+        # owner-only so other local users cannot read the traffic history.
+        fd = os.open(
+            self.path,
+            os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+            0o600,
+        )
+        try:
+            os.fchmod(fd, 0o600)
+        except (AttributeError, OSError):
+            pass
+        self._handle = os.fdopen(fd, "a", encoding="utf-8", errors="replace")
 
     def _close_locked(self) -> None:
         if self._handle is not None:

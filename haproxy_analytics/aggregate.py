@@ -60,6 +60,14 @@ class Aggregator:
         self.geo = geo
         self.max_visitor_rows = max_visitor_rows
         self.max_request_rows = max_request_rows
+        # Bound the aggregation maps themselves, not only the output rows.
+        # Bot traffic with many unique IPs/paths/SNIs must not grow memory
+        # without limit within one snapshot. Unknown keys collapse into a
+        # single "(other)" bucket after the cap.
+        self.max_tracked_ips = max(1000, min(max_visitor_rows, 50000))
+        self.max_tracked_paths = 10000
+        self.max_tracked_snis = 5000
+        self.max_tracked_backends = 1000
         self.mask_internal_ips = mask_internal_ips
         self.mask_networks = mask_networks
         self.mask_full = mask_full
@@ -127,6 +135,12 @@ class Aggregator:
 
     def record_repeated(self) -> None:
         self.repeated_groups += 1
+
+    @staticmethod
+    def _capped_key(mapping: dict, key: str, limit: int) -> str:
+        if key in mapping or len(mapping) < limit:
+            return key
+        return "(other)"
 
     def _geo(self, ip: str) -> dict[str, Any]:
         if ip not in self.ip_meta:
@@ -221,84 +235,91 @@ class Aggregator:
 
     def _add_tls(self, event: TlsEvent) -> None:
         count = event.count
+        ip = self._capped_key(self.tls_by_ip, event.ip, self.max_tracked_ips)
+        sni = "No SNI" if event.sni in ("-", "") else event.sni
+        sni = self._capped_key(self.sni_counts, sni, self.max_tracked_snis)
         self.tls_total += count
         self.parsed_events += count
-        self.tls_by_ip[event.ip] += count
-        sni = "No SNI" if event.sni in ("-", "") else event.sni
+        self.tls_by_ip[ip] += count
         self.sni_counts[sni] += count
-        self.ip_snis[event.ip][sni] += count
-        self._touch_ip(event.ip, event.timestamp_display)
+        self.ip_snis[ip][sni] += count
+        self._touch_ip(ip, event.timestamp_display)
 
-        geo = self._geo(event.ip)
+        geo = self._geo(ip)
         country = geo["country"]
         self.tls_countries[country] += count
         if geo["asn"] != "-":
             self.tls_asns[geo["asn"]] += count
-        self._record_country(country, geo["city"], "tls", count, event.ip, event.timestamp_display)
+        self._record_country(country, geo["city"], "tls", count, ip, event.timestamp_display)
         self._record_city(
-            country, geo["country_code"], geo["city"], "tls", count, event.ip, event.timestamp_display
+            country, geo["country_code"], geo["city"], "tls", count, ip, event.timestamp_display
         )
-        self._record_point(geo, "tls", count, event.ip)
+        self._record_point(geo, "tls", count, ip)
         display = event.timestamp_display
         if count > 1:
             display = f"{display} (x{count})"
-        self.recent_tls.appendleft((display, event.ip, sni, country, geo["city"]))
+        self.recent_tls.appendleft((display, ip, sni, country, geo["city"]))
 
     def _add_http(self, event: HttpEvent) -> None:
         count = event.count
+        ip = self._capped_key(self.http_by_ip, event.ip, self.max_tracked_ips)
+        path = self._capped_key(self.http_paths, event.path, self.max_tracked_paths)
+        backend = self._capped_key(
+            self.http_backends, event.backend, self.max_tracked_backends
+        )
         self.http_total += count
         self.parsed_events += count
-        self.http_by_ip[event.ip] += count
-        self.http_backends[event.backend] += count
+        self.http_by_ip[ip] += count
+        self.http_backends[backend] += count
         self.http_status[event.status] += count
         self.http_methods[event.method] += count
-        self.http_paths[event.path] += count
-        self.http_path_bytes[event.path] += event.bytes * count
-        self.http_path_ips[event.path].add(event.ip)
+        self.http_paths[path] += count
+        self.http_path_bytes[path] += event.bytes * count
+        self.http_path_ips[path].add(ip)
         self.bytes_out += event.bytes * count
-        self.ip_backends[event.ip][event.backend] += count
-        self._touch_ip(event.ip, event.timestamp_display)
+        self.ip_backends[ip][backend] += count
+        self._touch_ip(ip, event.timestamp_display)
 
         size = event.bytes * count
-        self.http_bytes_by_ip[event.ip] += size
+        self.http_bytes_by_ip[ip] += size
         if event.status[:1] in {"4", "5"}:
-            self.http_errors_by_ip[event.ip] += count
-        self.http_status_by_ip[event.ip][event.status] += count
-        self.http_methods_by_ip[event.ip][event.method] += count
+            self.http_errors_by_ip[ip] += count
+        self.http_status_by_ip[ip][event.status] += count
+        self.http_methods_by_ip[ip][event.method] += count
         self.http_protocols[event.protocol] += count
-        self.http_protocols_by_ip[event.ip][event.protocol] += count
-        self.http_paths_by_ip[event.ip][event.path] += count
-        self.http_backends_by_ip[event.ip][event.backend] += count
+        self.http_protocols_by_ip[ip][event.protocol] += count
+        self.http_paths_by_ip[ip][path] += count
+        self.http_backends_by_ip[ip][backend] += count
         status_class = (
             f"{event.status[0]}xx" if event.status[:1] in "12345" else "other"
         )
         self.http_status_classes[status_class] += count
         when = event.timestamp_display
         if when and when != "-":
-            first = self.http_first_seen.get(event.ip)
+            first = self.http_first_seen.get(ip)
             if first is None or when < first:
-                self.http_first_seen[event.ip] = when
-            last = self.http_last_seen.get(event.ip)
+                self.http_first_seen[ip] = when
+            last = self.http_last_seen.get(ip)
             if last is None or when > last:
-                self.http_last_seen[event.ip] = when
+                self.http_last_seen[ip] = when
             hour = when[11:13]
             if hour.isdigit():
                 self.http_hourly[int(hour)] += count
 
-        geo = self._geo(event.ip)
+        geo = self._geo(ip)
         country = geo["country"]
         self.http_countries[country] += count
         if geo["asn"] != "-":
             self.http_asns[geo["asn"]] += count
-        self._record_country(country, geo["city"], "http", count, event.ip, event.timestamp_display)
+        self._record_country(country, geo["city"], "http", count, ip, event.timestamp_display)
         self._record_city(
-            country, geo["country_code"], geo["city"], "http", count, event.ip, event.timestamp_display
+            country, geo["country_code"], geo["city"], "http", count, ip, event.timestamp_display
         )
-        self._record_point(geo, "http", count, event.ip)
+        self._record_point(geo, "http", count, ip)
         self.recent_http.appendleft(
             RequestRow(
                 when=event.timestamp_display,
-                ip=event.ip,
+                ip=ip,
                 host=select_http_host(event.hosts, event.path),
                 method=event.method,
                 path=event.path,

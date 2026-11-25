@@ -9,6 +9,7 @@ import mimetypes
 import os
 import secrets
 import sys
+import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -78,6 +79,8 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
     server_version = ""
     sys_version = ""
     protocol_version = "HTTP/1.1"
+    # Bound how long a client may hold a worker on a partial request.
+    timeout = 15
 
     def version_string(self) -> str:
         return ""
@@ -409,6 +412,29 @@ class AnalyticsHandler(BaseHTTPRequestHandler):
 class AnalyticsHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
+    max_workers = 32
+
+    def process_request(self, request: object, client_address: object) -> None:
+        if not self._worker_slots.acquire(blocking=False):
+            try:
+                request.sendall(  # type: ignore[attr-defined]
+                    b"HTTP/1.1 503 Service Unavailable\r\n"
+                    b"Connection: close\r\nContent-Length: 0\r\n\r\n"
+                )
+            finally:
+                self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._worker_slots.release()
+            raise
+
+    def process_request_thread(self, request: object, client_address: object) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._worker_slots.release()
 
     def handle_error(self, request: object, client_address: object) -> None:
         error = sys.exc_info()[1]
@@ -431,6 +457,7 @@ class AnalyticsHTTPServer(ThreadingHTTPServer):
         self.service = service
         self.live = live
         self.clear_token = secrets.token_urlsafe(32)
+        self._worker_slots = threading.BoundedSemaphore(self.max_workers)
         super().__init__(address, AnalyticsHandler)
 
 
